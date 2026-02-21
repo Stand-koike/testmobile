@@ -19,8 +19,8 @@
         .menu-open { transform: translateX(0); }
         .menu-closed { transform: translateX(100%); }
         
-        /* ペイントモード時のマップハイライト */
-        .record-mode-active { box-shadow: inset 0 0 0 4px #eab308; z-index: 10; pointer-events: none;}
+        /* ペイントモード時のマップ枠線 (pointer-events:none を削除しタップ可能に) */
+        .record-mode-active { box-shadow: inset 0 0 0 4px #eab308; }
     </style>
 </head>
 <body class="bg-slate-900 h-screen w-screen overflow-hidden font-sans text-slate-800 relative">
@@ -69,9 +69,9 @@
     </div>
 
     <!-- Bottom Right FAB (Floating Action Button) -->
-    <button id="btn-open-record" class="absolute bottom-8 right-6 px-6 py-4 bg-yellow-500 text-yellow-950 font-bold rounded-full shadow-[0_10px_25px_-5px_rgba(234,179,8,0.5)] active:scale-95 transition-all flex items-center gap-3 border-2 border-yellow-300 z-20">
-        <i data-lucide="edit-3" class="w-7 h-7"></i>
-        <span class="text-lg tracking-wide">作業記録</span>
+    <button id="btn-open-record" class="absolute bottom-8 right-6 px-5 py-4 bg-yellow-500 text-yellow-950 font-bold rounded-full shadow-[0_10px_25px_-5px_rgba(234,179,8,0.5)] active:scale-95 transition-all flex items-center gap-2 border-2 border-yellow-300 z-20">
+        <i data-lucide="edit-3" class="w-6 h-6"></i>
+        <span class="text-base tracking-wide">作業記録</span>
     </button>
 
     <!-- ==========================================
@@ -128,78 +128,97 @@
         </div>
     </div>
 
-    <!-- Record Bottom Sheet (Bottom Slide) -->
-    <div id="record-sheet" class="absolute bottom-0 w-full bg-slate-100 rounded-t-3xl shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.3)] drawer-closed transition-transform duration-300 z-30 flex flex-col border-t border-slate-200">
+    <!-- Record Bottom Sheet (Bottom Slide - Compact & Tabbed) -->
+    <div id="record-sheet" class="absolute bottom-0 w-full bg-slate-100 rounded-t-3xl shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.3)] drawer-closed transition-transform duration-300 z-30 flex flex-col border-t border-slate-200" style="max-height: 40vh;">
         
-        <div class="flex justify-between items-center p-3 border-b border-slate-200 bg-white rounded-t-3xl">
-            <div class="flex items-center gap-2 px-2 text-yellow-600 font-bold">
-                <i data-lucide="edit-3" class="w-5 h-5"></i> 記録モード
-                <span class="text-xs text-slate-400 font-normal ml-2 bg-slate-100 px-2 py-1 rounded">2本指で移動・ズーム</span>
+        <div class="flex flex-col bg-white rounded-t-3xl border-b border-slate-200 shrink-0">
+            <!-- Header & Save Button -->
+            <div class="flex justify-between items-center p-2 px-4">
+                <div class="flex items-center gap-2 text-yellow-600 font-bold text-sm">
+                    <i data-lucide="edit-3" class="w-4 h-4"></i> 記録モード
+                    <span class="text-[10px] text-slate-400 font-normal ml-1 bg-slate-100 px-1.5 py-0.5 rounded">2本指で移動・ズーム</span>
+                </div>
+                <button id="btn-close-record" class="px-4 py-1.5 bg-slate-800 text-white font-bold rounded-full shadow-md active:bg-slate-700 text-xs flex items-center gap-1">
+                    保存して戻る <i data-lucide="check" class="w-3 h-3"></i>
+                </button>
             </div>
-            <button id="btn-close-record" class="px-5 py-2 bg-slate-800 text-white font-bold rounded-full shadow-md active:bg-slate-700 text-sm flex items-center gap-2">
-                保存して戻る <i data-lucide="check" class="w-4 h-4"></i>
-            </button>
+            
+            <!-- Tabs -->
+            <div class="flex text-sm font-bold">
+                <button id="tab-paint" class="flex-1 py-2.5 text-yellow-600 border-b-2 border-yellow-500 bg-yellow-50 flex justify-center items-center gap-2 transition-colors">
+                    <i data-lucide="brush" class="w-4 h-4"></i> エリアを塗る
+                </button>
+                <button id="tab-counter" class="flex-1 py-2.5 text-slate-500 border-b-2 border-transparent hover:bg-slate-50 flex justify-center items-center gap-2 transition-colors">
+                    <i data-lucide="calculator" class="w-4 h-4"></i> カウンター
+                </button>
+            </div>
         </div>
 
-        <div class="p-3 flex flex-col gap-3">
-            <!-- Counters (Stepper UI) -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <!-- Tab Contents -->
+        <div class="p-3 overflow-y-auto flex-1">
+            
+            <!-- Tab 1: Paint Content -->
+            <div id="content-paint" class="flex flex-col gap-2 h-full justify-center">
+                <!-- Brushes -->
+                <div class="flex overflow-x-auto gap-3 py-1 no-scrollbar snap-x">
+                    <button id="btn-brush-1" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-yellow-400 text-yellow-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
+                        <i data-lucide="axe" class="w-5 h-5"></i><span class="text-[10px] mt-1">伐採済</span>
+                    </button>
+                    <button id="btn-brush-2" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-orange-400 text-orange-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
+                        <i data-lucide="tractor" class="w-5 h-5"></i><span class="text-[10px] mt-1">集材済</span>
+                    </button>
+                    <button id="btn-brush-3" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-sky-400 text-sky-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
+                        <i data-lucide="hammer" class="w-5 h-5"></i><span class="text-[10px] mt-1">造材済</span>
+                    </button>
+                    <button id="btn-brush-4" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-green-400 text-green-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
+                        <i data-lucide="truck" class="w-5 h-5"></i><span class="text-[10px] mt-1">搬出済</span>
+                    </button>
+                    <button id="btn-brush-0" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
+                        <i data-lucide="eraser" class="w-5 h-5"></i><span class="text-[10px] mt-1">消しゴム</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Tab 2: Counter Content (Hidden initially) -->
+            <div id="content-counter" class="hidden grid-cols-2 gap-2">
                 <!-- 伐採 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="text-center py-1 bg-yellow-50 text-xs font-bold text-yellow-700 border-b border-slate-100">伐採 (単位: 10本)</div>
+                    <div class="text-center py-1 bg-yellow-50 text-[10px] font-bold text-yellow-700 border-b border-slate-100">伐採 (単位: 10本)</div>
                     <div class="flex items-center justify-between p-1">
                         <button class="btn-counter-dec w-10 h-10 flex justify-center items-center text-slate-400 active:bg-slate-100 rounded-lg" data-target="felling" data-amount="10"><i data-lucide="minus"></i></button>
-                        <span id="sheet-count-felling" class="text-xl font-bold text-slate-800">0</span>
+                        <span id="sheet-count-felling" class="text-lg font-bold text-slate-800">0</span>
                         <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-yellow-600 bg-yellow-50 active:bg-yellow-100 rounded-lg" data-target="felling" data-amount="10"><i data-lucide="plus"></i></button>
                     </div>
                 </div>
                 <!-- 集材 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="text-center py-1 bg-orange-50 text-xs font-bold text-orange-700 border-b border-slate-100">集材 (単位: 10本)</div>
+                    <div class="text-center py-1 bg-orange-50 text-[10px] font-bold text-orange-700 border-b border-slate-100">集材 (単位: 10本)</div>
                     <div class="flex items-center justify-between p-1">
                         <button class="btn-counter-dec w-10 h-10 flex justify-center items-center text-slate-400 active:bg-slate-100 rounded-lg" data-target="yarding" data-amount="10"><i data-lucide="minus"></i></button>
-                        <span id="sheet-count-yarding" class="text-xl font-bold text-slate-800">0</span>
+                        <span id="sheet-count-yarding" class="text-lg font-bold text-slate-800">0</span>
                         <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-orange-600 bg-orange-50 active:bg-orange-100 rounded-lg" data-target="yarding" data-amount="10"><i data-lucide="plus"></i></button>
                     </div>
                 </div>
                 <!-- 造材 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="text-center py-1 bg-sky-50 text-xs font-bold text-sky-700 border-b border-slate-100">造材 (単位: 10本)</div>
+                    <div class="text-center py-1 bg-sky-50 text-[10px] font-bold text-sky-700 border-b border-slate-100">造材 (単位: 10本)</div>
                     <div class="flex items-center justify-between p-1">
                         <button class="btn-counter-dec w-10 h-10 flex justify-center items-center text-slate-400 active:bg-slate-100 rounded-lg" data-target="bucking" data-amount="10"><i data-lucide="minus"></i></button>
-                        <span id="sheet-count-bucking" class="text-xl font-bold text-slate-800">0</span>
+                        <span id="sheet-count-bucking" class="text-lg font-bold text-slate-800">0</span>
                         <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-sky-600 bg-sky-50 active:bg-sky-100 rounded-lg" data-target="bucking" data-amount="10"><i data-lucide="plus"></i></button>
                     </div>
                 </div>
                 <!-- 搬出 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="text-center py-1 bg-green-50 text-xs font-bold text-green-700 border-b border-slate-100">搬出 (単位: 1台)</div>
+                    <div class="text-center py-1 bg-green-50 text-[10px] font-bold text-green-700 border-b border-slate-100">搬出 (単位: 1台)</div>
                     <div class="flex items-center justify-between p-1">
                         <button class="btn-counter-dec w-10 h-10 flex justify-center items-center text-slate-400 active:bg-slate-100 rounded-lg" data-target="forwarding" data-amount="1"><i data-lucide="minus"></i></button>
-                        <span id="sheet-count-forwarding" class="text-xl font-bold text-slate-800">0</span>
+                        <span id="sheet-count-forwarding" class="text-lg font-bold text-slate-800">0</span>
                         <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-green-600 bg-green-50 active:bg-green-100 rounded-lg" data-target="forwarding" data-amount="1"><i data-lucide="plus"></i></button>
                     </div>
                 </div>
             </div>
 
-            <!-- Brushes -->
-            <div class="flex overflow-x-auto gap-3 py-1 no-scrollbar snap-x">
-                <button id="btn-brush-1" class="brush-btn snap-center shrink-0 w-24 py-3 bg-yellow-400 text-yellow-900 font-bold rounded-2xl border-4 border-transparent flex flex-col items-center shadow-md">
-                    <i data-lucide="axe" class="w-6 h-6"></i><span class="text-xs mt-1">伐採済</span>
-                </button>
-                <button id="btn-brush-2" class="brush-btn snap-center shrink-0 w-24 py-3 bg-orange-400 text-orange-900 font-bold rounded-2xl border-4 border-transparent flex flex-col items-center shadow-md">
-                    <i data-lucide="tractor" class="w-6 h-6"></i><span class="text-xs mt-1">集材済</span>
-                </button>
-                <button id="btn-brush-3" class="brush-btn snap-center shrink-0 w-24 py-3 bg-sky-400 text-sky-900 font-bold rounded-2xl border-4 border-transparent flex flex-col items-center shadow-md">
-                    <i data-lucide="hammer" class="w-6 h-6"></i><span class="text-xs mt-1">造材済</span>
-                </button>
-                <button id="btn-brush-4" class="brush-btn snap-center shrink-0 w-24 py-3 bg-green-400 text-green-900 font-bold rounded-2xl border-4 border-transparent flex flex-col items-center shadow-md">
-                    <i data-lucide="truck" class="w-6 h-6"></i><span class="text-xs mt-1">搬出済</span>
-                </button>
-                <button id="btn-brush-0" class="brush-btn snap-center shrink-0 w-24 py-3 bg-slate-200 text-slate-700 font-bold rounded-2xl border-4 border-transparent flex flex-col items-center shadow-md">
-                    <i data-lucide="eraser" class="w-6 h-6"></i><span class="text-xs mt-1">消しゴム</span>
-                </button>
-            </div>
         </div>
     </div>
 
@@ -223,7 +242,7 @@
         lucide.createIcons();
 
         // --- Data & State ---
-        const LOGICAL_MAP_SIZE = 1000; // 内部の論理地図サイズ (座標系)
+        const LOGICAL_MAP_SIZE = 1000;
         const GRID_SIZE = 40;
         const CELL_SIZE = LOGICAL_MAP_SIZE / GRID_SIZE;
         let gridData = new Uint8Array(GRID_SIZE * GRID_SIZE);
@@ -232,7 +251,6 @@
         let currentBrush = 1; 
         let isRecordMode = false;
 
-        // Viewport / Transform State (Pan & Zoom)
         let viewScale = 1;
         let viewOffsetX = 0;
         let viewOffsetY = 0;
@@ -241,7 +259,6 @@
         let gpsPosition = null;
         let gpsWatchId = null;
         
-        // Polygons
         let sitePolygons = [];
         let selectedPolygonId = null;
 
@@ -262,7 +279,6 @@
         }
 
         function resetView() {
-            // 初期表示で論理マップが画面に収まるようにスケール調整
             const minDim = Math.min(canvas.width, canvas.height) * 0.9;
             viewScale = minDim / LOGICAL_MAP_SIZE;
             viewOffsetX = (canvas.width - LOGICAL_MAP_SIZE * viewScale) / 2;
@@ -280,9 +296,6 @@
             ctx.save();
             ctx.translate(viewOffsetX, viewOffsetY);
             ctx.scale(viewScale, viewScale);
-            // ----------------------------------------------------
-            // ここから下は論理座標系 (0 ~ 1000) での描画
-            // ----------------------------------------------------
 
             if (bgMapImage) {
                 ctx.drawImage(bgMapImage, 0, 0, LOGICAL_MAP_SIZE, LOGICAL_MAP_SIZE);
@@ -300,8 +313,8 @@
                 if (poly.id === selectedPolygonId) {
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
                     ctx.fill();
-                    ctx.strokeStyle = '#ef4444'; // 選択中は赤実線
-                    ctx.lineWidth = 4 / viewScale; // スケール依存で太さを保つ
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = 4 / viewScale;
                     ctx.stroke();
                 } else {
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
@@ -320,13 +333,12 @@
                     let val = gridData[y * GRID_SIZE + x];
                     if (val > 0) {
                         ctx.fillStyle = STATE_COLORS[val];
-                        // わずかなオーバーラップで隙間を防ぐ
                         ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE + 0.5, CELL_SIZE + 0.5); 
                     }
                 }
             }
 
-            // 3. Grid Lines (レコードモード時のみ表示)
+            // 3. Grid Lines
             if (isRecordMode) {
                 ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
                 ctx.lineWidth = 1 / viewScale;
@@ -369,9 +381,7 @@
             return { gx, gy, valid: (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) };
         }
 
-        // Point in Polygon (Ray-casting)
         function isPointInPolygon(point, polyPoints) {
-            // point, polyPoints ともに相対座標(0.0~1.0)で判定
             const px = point.x / LOGICAL_MAP_SIZE;
             const py = point.y / LOGICAL_MAP_SIZE;
             let inside = false;
@@ -384,14 +394,9 @@
             return inside;
         }
 
-        // --- Touch / Mouse Interaction (Pan, Zoom, Paint, Select) ---
+        // --- Touch / Mouse Interaction ---
         let touchState = {
-            mode: 'none', // 'pan', 'pinch', 'paint', 'tap'
-            startX: 0, startY: 0,
-            lastX: 0, lastY: 0,
-            startDist: 0,
-            startScale: 1,
-            moved: false
+            mode: 'none', startX: 0, startY: 0, lastX: 0, lastY: 0, startDist: 0, startScale: 1, moved: false
         };
 
         function applyBrush(gx, gy) {
@@ -402,14 +407,11 @@
         }
 
         function drawPaintLine(lx0, ly0, lx1, ly1) {
-            // Bresenham on logical coords translated to grid
             const start = getGridCoordsFromLogical(lx0, ly0);
             const end = getGridCoordsFromLogical(lx1, ly1);
             if (!start.valid && !end.valid) return;
 
-            let x0 = start.gx, y0 = start.gy;
-            let x1 = end.gx, y1 = end.gy;
-            
+            let x0 = start.gx, y0 = start.gy, x1 = end.gx, y1 = end.gy;
             let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
             let sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1;
             let err = dx - dy;
@@ -426,25 +428,19 @@
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (e.touches.length === 1) {
-                touchState.startX = e.touches[0].clientX;
-                touchState.startY = e.touches[0].clientY;
-                touchState.lastX = touchState.startX;
-                touchState.lastY = touchState.startY;
+                touchState.startX = e.touches[0].clientX; touchState.startY = e.touches[0].clientY;
+                touchState.lastX = touchState.startX; touchState.lastY = touchState.startY;
                 touchState.moved = false;
 
                 if (isRecordMode) {
                     touchState.mode = 'paint';
                     const lc = getLogicalCoords(touchState.startX, touchState.startY);
                     const gc = getGridCoordsFromLogical(lc.x, lc.y);
-                    if (gc.valid) {
-                        applyBrush(gc.gx, gc.gy);
-                        renderCanvas();
-                    }
+                    if (gc.valid) { applyBrush(gc.gx, gc.gy); renderCanvas(); }
                 } else {
-                    touchState.mode = 'pan'; // トップ画面は1本指で移動
+                    touchState.mode = 'pan';
                 }
             } else if (e.touches.length === 2) {
-                // 2本指は常にパン＆ズーム
                 touchState.mode = 'pinch';
                 let dx = e.touches[0].clientX - e.touches[1].clientX;
                 let dy = e.touches[0].clientY - e.touches[1].clientY;
@@ -461,24 +457,17 @@
             touchState.moved = true;
 
             if (touchState.mode === 'paint' && e.touches.length === 1) {
-                const currentX = e.touches[0].clientX;
-                const currentY = e.touches[0].clientY;
+                const currentX = e.touches[0].clientX; const currentY = e.touches[0].clientY;
                 const lastLc = getLogicalCoords(touchState.lastX, touchState.lastY);
                 const currLc = getLogicalCoords(currentX, currentY);
-                
                 drawPaintLine(lastLc.x, lastLc.y, currLc.x, currLc.y);
-                
-                touchState.lastX = currentX;
-                touchState.lastY = currentY;
+                touchState.lastX = currentX; touchState.lastY = currentY;
                 renderCanvas();
             } 
             else if (touchState.mode === 'pan' && e.touches.length === 1) {
-                const currentX = e.touches[0].clientX;
-                const currentY = e.touches[0].clientY;
-                viewOffsetX += (currentX - touchState.lastX);
-                viewOffsetY += (currentY - touchState.lastY);
-                touchState.lastX = currentX;
-                touchState.lastY = currentY;
+                const currentX = e.touches[0].clientX; const currentY = e.touches[0].clientY;
+                viewOffsetX += (currentX - touchState.lastX); viewOffsetY += (currentY - touchState.lastY);
+                touchState.lastX = currentX; touchState.lastY = currentY;
                 renderCanvas();
             }
             else if (touchState.mode === 'pinch' && e.touches.length === 2) {
@@ -488,57 +477,41 @@
                 let currentCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 let currentCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
 
-                // Scale logic with center focus
-                let newScale = touchState.startScale * (currentDist / touchState.startDist);
-                newScale = Math.max(0.1, Math.min(newScale, 10)); // limit zoom
-
-                // Adjust offset to zoom towards center
+                let newScale = Math.max(0.1, Math.min(touchState.startScale * (currentDist / touchState.startDist), 10));
                 let scaleRatio = newScale / viewScale;
                 viewOffsetX = currentCenterX - (currentCenterX - viewOffsetX) * scaleRatio;
                 viewOffsetY = currentCenterY - (currentCenterY - viewOffsetY) * scaleRatio;
                 viewScale = newScale;
 
-                // Pan logic
                 viewOffsetX += (currentCenterX - touchState.lastX);
                 viewOffsetY += (currentCenterY - touchState.lastY);
 
-                touchState.lastX = currentCenterX;
-                touchState.lastY = currentCenterY;
+                touchState.lastX = currentCenterX; touchState.lastY = currentCenterY;
                 renderCanvas();
             }
         }, { passive: false });
 
         canvas.addEventListener('touchend', (e) => {
-            // トップ画面時で、ほとんど移動していなければ「タップ（選択）」とみなす
             if (!isRecordMode && touchState.mode === 'pan' && !touchState.moved) {
                 const lc = getLogicalCoords(touchState.startX, touchState.startY);
                 let hitId = null;
-                // 後から描画された（上の）レイヤーを優先判定するため逆順
                 for (let i = sitePolygons.length - 1; i >= 0; i--) {
                     if (isPointInPolygon(lc, sitePolygons[i].points)) {
-                        hitId = sitePolygons[i].id;
-                        break;
+                        hitId = sitePolygons[i].id; break;
                     }
                 }
-                
-                if (hitId) {
-                    selectPolygon(hitId);
-                } else {
-                    // 何もない場所をタップしたら非表示
+                if (hitId) selectPolygon(hitId);
+                else {
                     document.getElementById('property-card').classList.add('hidden');
-                    selectedPolygonId = null;
-                    renderCanvas();
+                    selectedPolygonId = null; renderCanvas();
                 }
             }
-            
             if (e.touches.length === 0) touchState.mode = 'none';
         });
 
         // Mouse Fallback for PC testing
         let isMouseDown = false;
-        canvas.addEventListener('mousedown', e => { 
-            isMouseDown = true; touchState.lastX = e.clientX; touchState.lastY = e.clientY; 
-        });
+        canvas.addEventListener('mousedown', e => { isMouseDown = true; touchState.lastX = e.clientX; touchState.lastY = e.clientY; });
         canvas.addEventListener('mousemove', e => {
             if(!isMouseDown) return;
             if(isRecordMode) {
@@ -546,8 +519,7 @@
                 const currLc = getLogicalCoords(e.clientX, e.clientY);
                 drawPaintLine(lastLc.x, lastLc.y, currLc.x, currLc.y);
             } else {
-                viewOffsetX += (e.clientX - touchState.lastX);
-                viewOffsetY += (e.clientY - touchState.lastY);
+                viewOffsetX += (e.clientX - touchState.lastX); viewOffsetY += (e.clientY - touchState.lastY);
             }
             touchState.lastX = e.clientX; touchState.lastY = e.clientY;
             renderCanvas();
@@ -556,17 +528,15 @@
         canvas.addEventListener('wheel', e => {
             e.preventDefault();
             const zoom = e.deltaY < 0 ? 1.1 : 0.9;
-            let scaleRatio = zoom;
-            viewOffsetX = e.clientX - (e.clientX - viewOffsetX) * scaleRatio;
-            viewOffsetY = e.clientY - (e.clientY - viewOffsetY) * scaleRatio;
+            viewOffsetX = e.clientX - (e.clientX - viewOffsetX) * zoom;
+            viewOffsetY = e.clientY - (e.clientY - viewOffsetY) * zoom;
             viewScale *= zoom;
             renderCanvas();
         }, {passive: false});
 
-
         // --- UI Interactions ---
 
-        // Property Card Logic
+        // Property Card & Polygon Selection
         function selectPolygon(id) {
             selectedPolygonId = id;
             const poly = sitePolygons.find(p => p.id === id);
@@ -577,7 +547,6 @@
                 document.getElementById('prop-team').textContent = poly.team;
                 document.getElementById('property-card').classList.remove('hidden');
                 
-                // メニューが開いていれば閉じる
                 document.getElementById('side-menu').classList.remove('menu-open');
                 document.getElementById('side-menu').classList.add('menu-closed');
             }
@@ -586,19 +555,16 @@
 
         document.getElementById('btn-close-prop').addEventListener('click', () => {
             document.getElementById('property-card').classList.add('hidden');
-            selectedPolygonId = null;
-            renderCanvas();
+            selectedPolygonId = null; renderCanvas();
         });
 
         // Sidebar Menu & Polygon List
         const sideMenu = document.getElementById('side-menu');
         document.getElementById('btn-toggle-menu').addEventListener('click', () => {
-            sideMenu.classList.remove('menu-closed');
-            sideMenu.classList.add('menu-open');
+            sideMenu.classList.remove('menu-closed'); sideMenu.classList.add('menu-open');
         });
         document.getElementById('btn-close-menu').addEventListener('click', () => {
-            sideMenu.classList.remove('menu-open');
-            sideMenu.classList.add('menu-closed');
+            sideMenu.classList.remove('menu-open'); sideMenu.classList.add('menu-closed');
         });
 
         function updatePolygonList() {
@@ -619,29 +585,37 @@
                 li.addEventListener('click', () => selectPolygon(poly.id));
                 list.appendChild(li);
             });
-            lucide.createIcons();
+            lucide.createIcons({ root: list });
         }
 
-        // Check-in Simulation (Load Multi Polygons)
+        // Check-in Simulation
         document.getElementById('btn-simulate-checkin').addEventListener('click', () => {
-            // ダミーの複数現場データをロード
             sitePolygons = [
                 { id: 'PRJ-2026-A', name: '清水山林 (東エリア)', area: 4.2, team: 'Aチーム', points: [{x: 0.1, y: 0.1}, {x: 0.5, y: 0.2}, {x: 0.4, y: 0.6}, {x: 0.2, y: 0.5}] },
                 { id: 'PRJ-2026-B', name: '清水山林 (西エリア)', area: 2.8, team: 'Bチーム', points: [{x: 0.6, y: 0.3}, {x: 0.9, y: 0.3}, {x: 0.8, y: 0.8}, {x: 0.5, y: 0.7}] }
             ];
             updatePolygonList();
-            resetView(); // 全体が見えるようにズームリセット
-            alert("2つの現場ポリゴンデータを読み込みました。メニューのリストか、地図上をタップして選択できます。");
+            resetView();
+            
+            // UI Feedback
+            const btn = document.getElementById('btn-simulate-checkin');
+            btn.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6"></i> 読込完了`;
+            btn.classList.replace('bg-blue-600', 'bg-emerald-600');
+            lucide.createIcons({root: btn});
+            setTimeout(() => {
+                btn.innerHTML = `<i data-lucide="qr-code" class="w-6 h-6"></i> 現場看板QRをスキャン<br><span class="text-xs font-normal text-emerald-200">(現場データを読み込む)</span>`;
+                btn.classList.replace('bg-emerald-600', 'bg-blue-600');
+                lucide.createIcons({root: btn});
+            }, 2000);
         });
 
-        // Record Mode Sheet
+        // Record Mode Sheet & Tabs
         const recordSheet = document.getElementById('record-sheet');
         const fab = document.getElementById('btn-open-record');
         
         document.getElementById('btn-open-record').addEventListener('click', () => {
             isRecordMode = true;
-            recordSheet.classList.remove('drawer-closed');
-            recordSheet.classList.add('drawer-open');
+            recordSheet.classList.remove('drawer-closed'); recordSheet.classList.add('drawer-open');
             document.getElementById('map-container').classList.add('record-mode-active');
             fab.style.display = 'none';
             renderCanvas();
@@ -649,21 +623,44 @@
         
         document.getElementById('btn-close-record').addEventListener('click', () => {
             isRecordMode = false;
-            recordSheet.classList.remove('drawer-open');
-            recordSheet.classList.add('drawer-closed');
+            recordSheet.classList.remove('drawer-open'); recordSheet.classList.add('drawer-closed');
             document.getElementById('map-container').classList.remove('record-mode-active');
             fab.style.display = 'flex';
             renderCanvas();
         });
 
+        // Tab Switching Logic
+        const tabPaint = document.getElementById('tab-paint');
+        const tabCounter = document.getElementById('tab-counter');
+        const contentPaint = document.getElementById('content-paint');
+        const contentCounter = document.getElementById('content-counter');
+
+        function switchTab(mode) {
+            if (mode === 'paint') {
+                tabPaint.className = "flex-1 py-2.5 text-yellow-600 border-b-2 border-yellow-500 bg-yellow-50 flex justify-center items-center gap-2 transition-colors";
+                tabCounter.className = "flex-1 py-2.5 text-slate-500 border-b-2 border-transparent hover:bg-slate-50 flex justify-center items-center gap-2 transition-colors";
+                contentPaint.classList.remove('hidden');
+                contentCounter.classList.add('hidden');
+                contentCounter.classList.remove('grid');
+            } else {
+                tabCounter.className = "flex-1 py-2.5 text-blue-600 border-b-2 border-blue-500 bg-blue-50 flex justify-center items-center gap-2 transition-colors";
+                tabPaint.className = "flex-1 py-2.5 text-slate-500 border-b-2 border-transparent hover:bg-slate-50 flex justify-center items-center gap-2 transition-colors";
+                contentCounter.classList.remove('hidden');
+                contentCounter.classList.add('grid');
+                contentPaint.classList.add('hidden');
+            }
+        }
+
+        tabPaint.addEventListener('click', () => switchTab('paint'));
+        tabCounter.addEventListener('click', () => switchTab('counter'));
+
         // Counters Logic (Stepper)
         function updateCountersUI() {
-            // Update Sheet
             document.getElementById('sheet-count-felling').textContent = counters.felling;
             document.getElementById('sheet-count-yarding').textContent = counters.yarding;
             document.getElementById('sheet-count-bucking').textContent = counters.bucking;
             document.getElementById('sheet-count-forwarding').textContent = counters.forwarding;
-            // Update Menu
+            
             document.getElementById('menu-felling').textContent = counters.felling;
             document.getElementById('menu-yarding').textContent = counters.yarding;
             document.getElementById('menu-bucking').textContent = counters.bucking;
@@ -674,8 +671,7 @@
             btn.addEventListener('click', (e) => {
                 const target = e.currentTarget.getAttribute('data-target');
                 const amount = parseInt(e.currentTarget.getAttribute('data-amount'));
-                counters[target] += amount;
-                updateCountersUI();
+                counters[target] += amount; updateCountersUI();
             });
         });
 
@@ -683,10 +679,7 @@
             btn.addEventListener('click', (e) => {
                 const target = e.currentTarget.getAttribute('data-target');
                 const amount = parseInt(e.currentTarget.getAttribute('data-amount'));
-                if (counters[target] >= amount) {
-                    counters[target] -= amount;
-                    updateCountersUI();
-                }
+                if (counters[target] >= amount) { counters[target] -= amount; updateCountersUI(); }
             });
         });
 
@@ -704,7 +697,7 @@
             });
         });
 
-        // Background Map & GPS Simulation (Same as before)
+        // Background Map & GPS Simulation
         document.getElementById('map-upload').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -723,7 +716,7 @@
             if (!gpsWatchId) {
                 btn.classList.replace('bg-white/90', 'bg-blue-600');
                 icon.classList.replace('text-slate-700', 'text-white');
-                let mockX = 0.5, mockY = 0.5; // 相対座標
+                let mockX = 0.5, mockY = 0.5;
                 gpsWatchId = setInterval(() => {
                     mockX += (Math.random() - 0.5) * 0.02; mockY += (Math.random() - 0.5) * 0.02;
                     gpsPosition = { x: mockX, y: mockY };
