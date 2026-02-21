@@ -43,6 +43,15 @@
                 <i data-lucide="map" class="w-5 h-5 text-emerald-400"></i>
                 <h1 class="text-lg font-bold tracking-wider">林業GIS <span class="text-emerald-400">Pro</span></h1>
             </div>
+            <div class="flex gap-2">
+                <input type="file" id="map-upload" accept="image/*" class="hidden">
+                <button id="btn-load-map" class="p-2 bg-slate-700 rounded-full active:bg-slate-600 shadow-sm" title="背景地図を読み込む">
+                    <i data-lucide="image" class="w-5 h-5 text-slate-300"></i>
+                </button>
+                <button id="btn-toggle-gps" class="p-2 bg-slate-700 rounded-full active:bg-slate-600 shadow-sm" title="GPS現在地">
+                    <i data-lucide="navigation" class="w-5 h-5 text-slate-300" id="icon-gps"></i>
+                </button>
+            </div>
         </div>
         <div class="grid grid-cols-4 gap-2">
             <div class="bg-slate-700 p-1 rounded-lg border-b-4 border-yellow-500 text-center">
@@ -175,6 +184,11 @@
             4: 'rgba(74, 222, 128, 0.8)'  // Tailwind green-400
         };
 
+        // --- Map & GPS State ---
+        let bgMapImage = null;
+        let gpsPosition = null; // {x, y} in canvas coordinates
+        let gpsWatchId = null;
+
         // --- Canvas Setup ---
         const canvas = document.getElementById('mapCanvas');
         const ctx = canvas.getContext('2d');
@@ -192,6 +206,12 @@
         // --- Drawing Logic ---
         function renderCanvas() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Background Map Image if exists
+            if (bgMapImage) {
+                ctx.drawImage(bgMapImage, 0, 0, canvas.width, canvas.height);
+            }
+
             const cellW = canvas.width / GRID_SIZE;
             const cellH = canvas.height / GRID_SIZE;
 
@@ -218,6 +238,24 @@
                 ctx.lineTo(canvas.width, i * cellH);
             }
             ctx.stroke();
+
+            // Draw GPS Current Location
+            if (gpsPosition) {
+                // Outer ring
+                ctx.beginPath();
+                ctx.arc(gpsPosition.x, gpsPosition.y, 14, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
+                ctx.fill();
+                
+                // Inner dot
+                ctx.beginPath();
+                ctx.arc(gpsPosition.x, gpsPosition.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = '#3b82f6'; // blue-500
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
         }
 
         // --- Interaction Logic (Touch & Mouse) ---
@@ -348,6 +386,67 @@
         }
 
         // --- UI Event Listeners ---
+
+        // Map Upload Logic
+        document.getElementById('btn-load-map').addEventListener('click', () => {
+            document.getElementById('map-upload').click();
+        });
+
+        document.getElementById('map-upload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    bgMapImage = img;
+                    renderCanvas();
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // GPS Toggle Logic (Simulation for Prototype)
+        document.getElementById('btn-toggle-gps').addEventListener('click', () => {
+            const btn = document.getElementById('btn-toggle-gps');
+            const icon = document.getElementById('icon-gps');
+            
+            if (gpsWatchId === null) {
+                // Start GPS
+                btn.classList.replace('bg-slate-700', 'bg-blue-600');
+                icon.classList.replace('text-slate-300', 'text-white');
+                
+                // Prototype: Fake GPS movement mapping to canvas coords
+                // (In production, this maps navigator.geolocation lat/lng via Proj4js)
+                let mockX = canvas.width / 2;
+                let mockY = canvas.height / 2;
+                
+                gpsWatchId = setInterval(() => {
+                    // Random walk
+                    mockX += (Math.random() - 0.5) * 15;
+                    mockY += (Math.random() - 0.5) * 15;
+                    // Keep within bounds
+                    mockX = Math.max(10, Math.min(canvas.width - 10, mockX));
+                    mockY = Math.max(10, Math.min(canvas.height - 10, mockY));
+                    
+                    gpsPosition = { x: mockX, y: mockY };
+                    renderCanvas();
+                }, 1000); // Update every 1s
+                
+                gpsPosition = { x: mockX, y: mockY };
+                renderCanvas();
+                
+            } else {
+                // Stop GPS
+                clearInterval(gpsWatchId);
+                gpsWatchId = null;
+                gpsPosition = null;
+                btn.classList.replace('bg-blue-600', 'bg-slate-700');
+                icon.classList.replace('text-white', 'text-slate-300');
+                renderCanvas();
+            }
+        });
 
         function updateBrushUI() {
             const btns = [
