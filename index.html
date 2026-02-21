@@ -13,37 +13,26 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* Drawer Animations */
         .drawer-open { transform: translateY(0); }
         .drawer-closed { transform: translateY(100%); }
         .menu-open { transform: translateX(0); }
         .menu-closed { transform: translateX(100%); }
         
-        /* ペイントモード時のマップ枠線 (pointer-events:none を削除しタップ可能に) */
         .record-mode-active { box-shadow: inset 0 0 0 4px #eab308; }
     </style>
 </head>
 <body class="bg-slate-900 h-[100dvh] w-screen overflow-hidden font-sans text-slate-800 relative">
 
-    <!-- ==========================================
-         Layer 1: Map (Full Screen)
-    =========================================== -->
+    <!-- Layer 1: Map -->
     <main id="map-container" class="absolute inset-0 map-bg flex justify-center items-center overflow-hidden transition-shadow duration-300">
-        <!-- Canvas for Map, Polygons, and Paint -->
         <canvas id="mapCanvas" class="bg-transparent touch-none"></canvas>
     </main>
 
-    <!-- ==========================================
-         Layer 2: Overlays (Properties & Controls)
-    =========================================== -->
-    
-    <!-- Feature Properties Card (Hidden by default) -->
+    <!-- Layer 2: Overlays -->
     <div id="property-card" class="hidden absolute top-4 left-4 right-16 bg-white/95 backdrop-blur-sm p-3 rounded-2xl shadow-lg border border-slate-200 pointer-events-auto transition-opacity z-20">
         <button id="btn-close-prop" class="absolute top-2 right-2 p-1 text-slate-400 active:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
         <div class="flex items-start gap-3">
-            <div class="bg-emerald-100 p-2 rounded-xl text-emerald-600">
-                <i data-lucide="map-pin" class="w-6 h-6"></i>
-            </div>
+            <div class="bg-emerald-100 p-2 rounded-xl text-emerald-600"><i data-lucide="map-pin" class="w-6 h-6"></i></div>
             <div class="pr-6">
                 <h2 class="text-sm font-bold text-slate-800" id="prop-site-name">-</h2>
                 <div class="grid grid-cols-2 gap-x-4 mt-1 text-xs text-slate-500">
@@ -55,7 +44,6 @@
         </div>
     </div>
 
-    <!-- Top Right Controls -->
     <div class="absolute top-4 right-4 flex flex-col gap-3 z-20">
         <button id="btn-toggle-menu" class="w-12 h-12 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex justify-center items-center text-slate-700 active:bg-slate-200 transition-colors">
             <i data-lucide="menu" class="w-6 h-6"></i>
@@ -68,30 +56,22 @@
         </button>
     </div>
 
-    <!-- Bottom Right FAB (Floating Action Button) -->
     <button id="btn-open-record" class="absolute bottom-8 right-6 px-5 py-4 bg-yellow-500 text-yellow-950 font-bold rounded-full shadow-[0_10px_25px_-5px_rgba(234,179,8,0.5)] active:scale-95 transition-all flex items-center gap-2 border-2 border-yellow-300 z-20">
         <i data-lucide="edit-3" class="w-6 h-6"></i>
         <span class="text-base tracking-wide">作業記録</span>
     </button>
 
-    <!-- ==========================================
-         Layer 3: Drawers & Modals
-    =========================================== -->
-
-    <!-- Management Menu (Right Slide) -->
+    <!-- Layer 3: Drawers -->
     <div id="side-menu" class="absolute top-0 right-0 h-full w-72 bg-slate-900 text-white shadow-2xl menu-closed transition-transform duration-300 z-40 flex flex-col">
-        <div class="p-5 flex justify-between items-center border-b border-slate-700">
+        <div class="p-5 flex justify-between items-center border-b border-slate-700 shrink-0">
             <h3 class="font-bold text-lg">メニュー・管理</h3>
             <button id="btn-close-menu" class="p-2 text-slate-400 active:text-white"><i data-lucide="x"></i></button>
         </div>
         <div class="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
-            
             <button id="btn-simulate-checkin" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-blue-600 rounded-xl active:bg-blue-700 text-sm font-bold shadow-md">
                 <i data-lucide="qr-code" class="w-6 h-6"></i>
                 現場看板QRをスキャン<br><span class="text-xs font-normal text-blue-200">(現場データを読み込む)</span>
             </button>
-
-            <!-- ポリゴンデータリスト -->
             <div class="shrink-0 bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
                 <div class="bg-slate-700 px-3 py-2 text-xs font-bold text-slate-300 flex items-center gap-2">
                     <i data-lucide="layers" class="w-4 h-4"></i> ポリゴンデータリスト
@@ -100,14 +80,11 @@
                     <li class="p-3 text-xs text-slate-400 text-center">QRをスキャンしてください</li>
                 </ul>
             </div>
-
             <button id="btn-show-sync" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-emerald-600 rounded-xl active:bg-emerald-700 text-sm font-bold shadow-md">
                 <i data-lucide="refresh-cw" class="w-6 h-6"></i>
                 Sync Hub (データ合体)<br><span class="text-xs font-normal text-emerald-200">(仲間と進捗を同期)</span>
             </button>
-            
             <hr class="shrink-0 border-slate-700 my-1">
-
             <div class="shrink-0">
                 <label class="text-xs text-slate-400 font-bold mb-2 block">オフライン地図 (GeoTIFF代替)</label>
                 <input type="file" id="map-upload" accept="image/*" class="hidden">
@@ -115,7 +92,6 @@
                     <i data-lucide="image" class="w-4 h-4"></i> 背景画像をロード
                 </button>
             </div>
-            
             <div class="shrink-0 mt-auto bg-slate-800 p-4 rounded-xl border border-slate-700">
                 <div class="text-xs text-slate-400 mb-2 font-bold">現在のローカル実績</div>
                 <div class="grid grid-cols-2 gap-2 text-sm">
@@ -128,11 +104,9 @@
         </div>
     </div>
 
-    <!-- Record Bottom Sheet (Bottom Slide - Compact & Tabbed) -->
+    <!-- Record Bottom Sheet -->
     <div id="record-sheet" class="absolute bottom-0 w-full bg-slate-100 rounded-t-3xl shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.3)] drawer-closed transition-transform duration-300 z-30 flex flex-col border-t border-slate-200" style="max-height: 40dvh;">
-        
         <div class="flex flex-col bg-white rounded-t-3xl border-b border-slate-200 shrink-0">
-            <!-- Header & Save Button -->
             <div class="flex justify-between items-center p-2 px-4">
                 <div class="flex items-center gap-2 text-yellow-600 font-bold text-sm">
                     <i data-lucide="edit-3" class="w-4 h-4"></i> 記録モード
@@ -142,8 +116,6 @@
                     保存して戻る <i data-lucide="check" class="w-3 h-3"></i>
                 </button>
             </div>
-            
-            <!-- Tabs -->
             <div class="flex text-sm font-bold">
                 <button id="tab-paint" class="flex-1 py-2.5 text-yellow-600 border-b-2 border-yellow-500 bg-yellow-50 flex justify-center items-center gap-2 transition-colors">
                     <i data-lucide="brush" class="w-4 h-4"></i> エリアを塗る
@@ -154,12 +126,9 @@
             </div>
         </div>
 
-        <!-- Tab Contents -->
         <div class="p-3 overflow-y-auto flex-1">
-            
-            <!-- Tab 1: Paint Content -->
+            <!-- Paint Tab -->
             <div id="content-paint" class="flex flex-col gap-2 h-full justify-center">
-                <!-- Brushes -->
                 <div class="flex overflow-x-auto gap-3 py-1 no-scrollbar snap-x">
                     <button id="btn-brush-1" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-yellow-400 text-yellow-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
                         <i data-lucide="axe" class="w-5 h-5"></i><span class="text-[10px] mt-1">伐採済</span>
@@ -179,7 +148,7 @@
                 </div>
             </div>
             
-            <!-- Tab 2: Counter Content (Hidden initially) -->
+            <!-- Counter Tab -->
             <div id="content-counter" class="hidden grid-cols-2 gap-2">
                 <!-- 伐採 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -218,11 +187,10 @@
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <!-- Sync Modal (Hidden) -->
+    <!-- Sync Modal -->
     <div id="sync-modal" class="hidden fixed inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
             <div class="bg-blue-600 p-4 flex justify-between items-center text-white">
@@ -231,8 +199,22 @@
             </div>
             <div class="p-5 flex flex-col items-center gap-4">
                 <div id="qrcode-container" class="bg-white p-3 border-2 border-slate-100 rounded-xl"></div>
-                <button id="btn-simulate-scan" class="w-full py-3 bg-slate-800 text-white rounded-xl font-bold shadow active:bg-slate-700">
-                    仲間のQRをスキャン(模擬)
+                
+                <!-- PCテスト用のコピペエリアを追加 -->
+                <div class="w-full mt-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <p class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
+                        <i data-lucide="monitor" class="w-3 h-3"></i> PC版テスト用ペイロード
+                    </p>
+                    <div class="flex gap-2">
+                        <input type="text" id="payload-copy-text" class="flex-1 p-2 text-xs font-mono bg-white border border-slate-300 rounded-lg outline-none" readonly>
+                        <button id="btn-copy-payload" class="px-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 active:bg-blue-300 transition-colors shadow-sm">
+                            <i data-lucide="copy" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button id="btn-simulate-scan" class="w-full py-3 bg-slate-800 text-white rounded-xl font-bold shadow active:bg-slate-700 mt-2 flex justify-center items-center gap-2">
+                    <i data-lucide="camera" class="w-5 h-5"></i> 仲間のQRをスキャン(模擬)
                 </button>
             </div>
         </div>
@@ -271,6 +253,26 @@
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('map-container');
 
+        // --- Data Compression Logic (Added back for generating payload) ---
+        function compressMapData() {
+            let rle = "";
+            let count = 1;
+            let prev = gridData[0];
+            const stateMap = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'};
+
+            for (let i = 1; i < gridData.length; i++) {
+                if (gridData[i] === prev) {
+                    count++;
+                } else {
+                    rle += count + stateMap[prev];
+                    prev = gridData[i];
+                    count = 1;
+                }
+            }
+            rle += count + stateMap[prev];
+            return btoa(rle);
+        }
+
         // --- Initialization & Resize ---
         function resizeCanvas() {
             canvas.width = container.clientWidth;
@@ -301,7 +303,6 @@
                 ctx.drawImage(bgMapImage, 0, 0, LOGICAL_MAP_SIZE, LOGICAL_MAP_SIZE);
             }
 
-            // 1. Polygons
             sitePolygons.forEach(poly => {
                 ctx.beginPath();
                 ctx.moveTo(poly.points[0].x * LOGICAL_MAP_SIZE, poly.points[0].y * LOGICAL_MAP_SIZE);
@@ -327,7 +328,6 @@
                 }
             });
 
-            // 2. Painted Cells
             for (let y = 0; y < GRID_SIZE; y++) {
                 for (let x = 0; x < GRID_SIZE; x++) {
                     let val = gridData[y * GRID_SIZE + x];
@@ -338,7 +338,6 @@
                 }
             }
 
-            // 3. Grid Lines
             if (isRecordMode) {
                 ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
                 ctx.lineWidth = 1 / viewScale;
@@ -350,7 +349,6 @@
                 ctx.stroke();
             }
 
-            // 4. GPS
             if (gpsPosition) {
                 const gx = gpsPosition.x * LOGICAL_MAP_SIZE;
                 const gy = gpsPosition.y * LOGICAL_MAP_SIZE;
@@ -364,7 +362,6 @@
             ctx.restore();
         }
 
-        // --- Coordinate Conversion & Algorithms ---
         function getLogicalCoords(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
             const canvasX = clientX - rect.left;
@@ -394,10 +391,7 @@
             return inside;
         }
 
-        // --- Touch / Mouse Interaction ---
-        let touchState = {
-            mode: 'none', startX: 0, startY: 0, lastX: 0, lastY: 0, startDist: 0, startScale: 1, moved: false
-        };
+        let touchState = { mode: 'none', startX: 0, startY: 0, lastX: 0, lastY: 0, startDist: 0, startScale: 1, moved: false };
 
         function applyBrush(gx, gy) {
             if (!isRecordMode) return;
@@ -534,9 +528,6 @@
             renderCanvas();
         }, {passive: false});
 
-        // --- UI Interactions ---
-
-        // Property Card & Polygon Selection
         function selectPolygon(id) {
             selectedPolygonId = id;
             const poly = sitePolygons.find(p => p.id === id);
@@ -558,7 +549,6 @@
             selectedPolygonId = null; renderCanvas();
         });
 
-        // Sidebar Menu & Polygon List
         const sideMenu = document.getElementById('side-menu');
         document.getElementById('btn-toggle-menu').addEventListener('click', () => {
             sideMenu.classList.remove('menu-closed'); sideMenu.classList.add('menu-open');
@@ -588,7 +578,6 @@
             lucide.createIcons({ root: list });
         }
 
-        // Check-in Simulation
         document.getElementById('btn-simulate-checkin').addEventListener('click', () => {
             sitePolygons = [
                 { id: 'PRJ-2026-A', name: '清水山林 (東エリア)', area: 4.2, team: 'Aチーム', points: [{x: 0.1, y: 0.1}, {x: 0.5, y: 0.2}, {x: 0.4, y: 0.6}, {x: 0.2, y: 0.5}] },
@@ -597,7 +586,6 @@
             updatePolygonList();
             resetView();
             
-            // UI Feedback
             const btn = document.getElementById('btn-simulate-checkin');
             btn.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6"></i> 読込完了`;
             btn.classList.replace('bg-blue-600', 'bg-emerald-600');
@@ -609,7 +597,6 @@
             }, 2000);
         });
 
-        // Record Mode Sheet & Tabs
         const recordSheet = document.getElementById('record-sheet');
         const fab = document.getElementById('btn-open-record');
         
@@ -629,7 +616,6 @@
             renderCanvas();
         });
 
-        // Tab Switching Logic
         const tabPaint = document.getElementById('tab-paint');
         const tabCounter = document.getElementById('tab-counter');
         const contentPaint = document.getElementById('content-paint');
@@ -654,7 +640,6 @@
         tabPaint.addEventListener('click', () => switchTab('paint'));
         tabCounter.addEventListener('click', () => switchTab('counter'));
 
-        // Counters Logic (Stepper)
         function updateCountersUI() {
             document.getElementById('sheet-count-felling').textContent = counters.felling;
             document.getElementById('sheet-count-yarding').textContent = counters.yarding;
@@ -683,7 +668,6 @@
             });
         });
 
-        // Brush Logic
         function updateBrushUI() {
             [1, 2, 3, 4, 0].forEach(val => {
                 const el = document.getElementById(`btn-brush-${val}`);
@@ -697,7 +681,6 @@
             });
         });
 
-        // Background Map & GPS Simulation
         document.getElementById('map-upload').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -730,19 +713,49 @@
             }
         });
 
-        // Sync Modal
+        // --- Sync Modal & Test Copy Functionality ---
         const syncModal = document.getElementById('sync-modal');
         document.getElementById('btn-show-sync').addEventListener('click', () => {
             sideMenu.classList.remove('menu-open'); sideMenu.classList.add('menu-closed');
-            const payloadStr = JSON.stringify({p: "compressed_data_mock", c: [counters.felling, counters.yarding, counters.bucking, counters.forwarding]});
+            
+            // データを圧縮してペイロードJSONを作成
+            const payload = {
+                p: compressMapData(),
+                c: [counters.felling, counters.yarding, counters.bucking, counters.forwarding]
+            };
+            const payloadStr = JSON.stringify(payload);
+            
+            // テスト用コピーエリアに文字列をセット
+            document.getElementById('payload-copy-text').value = payloadStr;
+
+            // QRコード生成
             const qrContainer = document.getElementById('qrcode-container');
             qrContainer.innerHTML = '';
             new QRCode(qrContainer, { text: payloadStr, width: 200, height: 200 });
+            
             syncModal.classList.remove('hidden');
         });
+
         document.getElementById('btn-close-sync-modal').addEventListener('click', () => syncModal.classList.add('hidden'));
+        
         document.getElementById('btn-simulate-scan').addEventListener('click', () => {
             alert("他端末のQRをスキャンしてデータを合体しました！"); syncModal.classList.add('hidden');
+        });
+
+        // コピーボタンの処理
+        document.getElementById('btn-copy-payload').addEventListener('click', () => {
+            const copyText = document.getElementById('payload-copy-text');
+            copyText.select();
+            document.execCommand('copy');
+            
+            const btn = document.getElementById('btn-copy-payload');
+            btn.innerHTML = '<i data-lucide="check" class="w-4 h-4 text-emerald-600"></i>';
+            lucide.createIcons({root: btn.parentElement});
+            
+            setTimeout(() => {
+                btn.innerHTML = '<i data-lucide="copy" class="w-4 h-4"></i>';
+                lucide.createIcons({root: btn.parentElement});
+            }, 2000);
         });
 
         // Init
