@@ -23,7 +23,7 @@
         .record-mode-active { box-shadow: inset 0 0 0 4px #eab308; }
     </style>
 </head>
-<body class="bg-slate-900 h-screen w-screen overflow-hidden font-sans text-slate-800 relative">
+<body class="bg-slate-900 h-[100dvh] w-screen overflow-hidden font-sans text-slate-800 relative">
 
     <!-- ==========================================
          Layer 1: Map (Full Screen)
@@ -86,13 +86,13 @@
         </div>
         <div class="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
             
-            <button id="btn-simulate-checkin" class="flex flex-col items-center gap-2 p-4 bg-blue-600 rounded-xl active:bg-blue-700 text-sm font-bold shadow-md">
+            <button id="btn-simulate-checkin" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-blue-600 rounded-xl active:bg-blue-700 text-sm font-bold shadow-md">
                 <i data-lucide="qr-code" class="w-6 h-6"></i>
                 現場看板QRをスキャン<br><span class="text-xs font-normal text-blue-200">(現場データを読み込む)</span>
             </button>
 
             <!-- ポリゴンデータリスト -->
-            <div class="bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
+            <div class="shrink-0 bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
                 <div class="bg-slate-700 px-3 py-2 text-xs font-bold text-slate-300 flex items-center gap-2">
                     <i data-lucide="layers" class="w-4 h-4"></i> ポリゴンデータリスト
                 </div>
@@ -101,14 +101,14 @@
                 </ul>
             </div>
 
-            <button id="btn-show-sync" class="flex flex-col items-center gap-2 p-4 bg-emerald-600 rounded-xl active:bg-emerald-700 text-sm font-bold shadow-md">
+            <button id="btn-show-sync" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-emerald-600 rounded-xl active:bg-emerald-700 text-sm font-bold shadow-md">
                 <i data-lucide="refresh-cw" class="w-6 h-6"></i>
                 Sync Hub (データ合体)<br><span class="text-xs font-normal text-emerald-200">(仲間と進捗を同期)</span>
             </button>
             
-            <hr class="border-slate-700 my-1">
+            <hr class="shrink-0 border-slate-700 my-1">
 
-            <div>
+            <div class="shrink-0">
                 <label class="text-xs text-slate-400 font-bold mb-2 block">オフライン地図 (GeoTIFF代替)</label>
                 <input type="file" id="map-upload" accept="image/*" class="hidden">
                 <button onclick="document.getElementById('map-upload').click()" class="w-full flex items-center justify-center gap-2 p-3 bg-slate-800 rounded-xl active:bg-slate-700 text-sm">
@@ -116,7 +116,7 @@
                 </button>
             </div>
             
-            <div class="mt-auto bg-slate-800 p-4 rounded-xl border border-slate-700">
+            <div class="shrink-0 mt-auto bg-slate-800 p-4 rounded-xl border border-slate-700">
                 <div class="text-xs text-slate-400 mb-2 font-bold">現在のローカル実績</div>
                 <div class="grid grid-cols-2 gap-2 text-sm">
                     <div>伐採: <span id="menu-felling" class="font-bold text-yellow-400">0</span></div>
@@ -129,7 +129,7 @@
     </div>
 
     <!-- Record Bottom Sheet (Bottom Slide - Compact & Tabbed) -->
-    <div id="record-sheet" class="absolute bottom-0 w-full bg-slate-100 rounded-t-3xl shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.3)] drawer-closed transition-transform duration-300 z-30 flex flex-col border-t border-slate-200" style="max-height: 40vh;">
+    <div id="record-sheet" class="absolute bottom-0 w-full bg-slate-100 rounded-t-3xl shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.3)] drawer-closed transition-transform duration-300 z-30 flex flex-col border-t border-slate-200" style="max-height: 40dvh;">
         
         <div class="flex flex-col bg-white rounded-t-3xl border-b border-slate-200 shrink-0">
             <!-- Header & Save Button -->
