@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>林業GIS Pro - Field</title>
+    <title>林業GIS Pro - モバイル版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- カメラによるQRスキャン用 -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- GeoTIFF読み込み用 -->
+    <script src="https://cdn.jsdelivr.net/npm/geotiff"></script>
     <style>
         body { overscroll-behavior-y: none; user-select: none; -webkit-user-select: none; touch-action: none; }
         .map-bg { background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; }
@@ -19,6 +23,7 @@
         .menu-closed { transform: translateX(100%); }
         
         .record-mode-active { box-shadow: inset 0 0 0 4px #eab308; }
+        #qr-reader video { object-fit: cover !important; border-radius: 12px; }
     </style>
 </head>
 <body class="bg-slate-900 h-[100dvh] w-screen overflow-hidden font-sans text-slate-800 relative">
@@ -37,8 +42,7 @@
                 <h2 class="text-sm font-bold text-slate-800" id="prop-site-name">-</h2>
                 <div class="grid grid-cols-2 gap-x-4 mt-1 text-xs text-slate-500">
                     <p>ID: <span id="prop-site-id" class="font-mono text-slate-700">-</span></p>
-                    <p>面積: <span id="prop-site-area" class="text-slate-700">-</span> ha</p>
-                    <p class="col-span-2 mt-1">作業班: <span id="prop-team" class="text-slate-700 font-bold">-</span></p>
+                    <p>現場枠: <span class="text-slate-700 font-bold">セット済</span></p>
                 </div>
             </div>
         </div>
@@ -68,10 +72,12 @@
             <button id="btn-close-menu" class="p-2 text-slate-400 active:text-white"><i data-lucide="x"></i></button>
         </div>
         <div class="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
-            <button id="btn-simulate-checkin" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-blue-600 rounded-xl active:bg-blue-700 text-sm font-bold shadow-md">
+            
+            <button id="btn-scan-checkin" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-blue-600 rounded-xl active:bg-blue-700 text-sm font-bold shadow-md">
                 <i data-lucide="qr-code" class="w-6 h-6"></i>
-                現場看板QRをスキャン<br><span class="text-xs font-normal text-blue-200">(現場データを読み込む)</span>
+                現場看板QRをスキャン<br><span class="text-xs font-normal text-blue-200">(現場枠データを読込)</span>
             </button>
+
             <div class="shrink-0 bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
                 <div class="bg-slate-700 px-3 py-2 text-xs font-bold text-slate-300 flex items-center gap-2">
                     <i data-lucide="layers" class="w-4 h-4"></i> ポリゴンデータリスト
@@ -80,18 +86,25 @@
                     <li class="p-3 text-xs text-slate-400 text-center">QRをスキャンしてください</li>
                 </ul>
             </div>
+
             <button id="btn-show-sync" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-emerald-600 rounded-xl active:bg-emerald-700 text-sm font-bold shadow-md">
                 <i data-lucide="refresh-cw" class="w-6 h-6"></i>
-                Sync Hub (データ合体)<br><span class="text-xs font-normal text-emerald-200">(仲間と進捗を同期)</span>
+                Sync Hub (データ合体)<br><span class="text-xs font-normal text-emerald-200">(仲間・PCと進捗を同期)</span>
             </button>
+            
             <hr class="shrink-0 border-slate-700 my-1">
+
             <div class="shrink-0">
-                <label class="text-xs text-slate-400 font-bold mb-2 block">オフライン地図 (GeoTIFF代替)</label>
-                <input type="file" id="map-upload" accept="image/*" class="hidden">
-                <button onclick="document.getElementById('map-upload').click()" class="w-full flex items-center justify-center gap-2 p-3 bg-slate-800 rounded-xl active:bg-slate-700 text-sm">
+                <label class="text-xs text-slate-400 font-bold mb-2 block flex justify-between items-end">
+                    <span>オフライン地図</span>
+                    <span class="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">GeoTIFF 対応</span>
+                </label>
+                <input type="file" id="map-upload" accept="image/*,.tif,.tiff" class="hidden">
+                <button onclick="document.getElementById('map-upload').click()" class="w-full flex items-center justify-center gap-2 p-3 bg-slate-800 rounded-xl active:bg-slate-700 text-sm border border-slate-600">
                     <i data-lucide="image" class="w-4 h-4"></i> 背景画像をロード
                 </button>
             </div>
+            
             <div class="shrink-0 mt-auto bg-slate-800 p-4 rounded-xl border border-slate-700">
                 <div class="text-xs text-slate-400 mb-2 font-bold">現在のローカル実績</div>
                 <div class="grid grid-cols-2 gap-2 text-sm">
@@ -150,7 +163,6 @@
             
             <!-- Counter Tab -->
             <div id="content-counter" class="hidden grid-cols-2 gap-2">
-                <!-- 伐採 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                     <div class="text-center py-1 bg-yellow-50 text-[10px] font-bold text-yellow-700 border-b border-slate-100">伐採 (単位: 10本)</div>
                     <div class="flex items-center justify-between p-1">
@@ -159,7 +171,6 @@
                         <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-yellow-600 bg-yellow-50 active:bg-yellow-100 rounded-lg" data-target="felling" data-amount="10"><i data-lucide="plus"></i></button>
                     </div>
                 </div>
-                <!-- 集材 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                     <div class="text-center py-1 bg-orange-50 text-[10px] font-bold text-orange-700 border-b border-slate-100">集材 (単位: 10本)</div>
                     <div class="flex items-center justify-between p-1">
@@ -168,7 +179,6 @@
                         <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-orange-600 bg-orange-50 active:bg-orange-100 rounded-lg" data-target="yarding" data-amount="10"><i data-lucide="plus"></i></button>
                     </div>
                 </div>
-                <!-- 造材 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                     <div class="text-center py-1 bg-sky-50 text-[10px] font-bold text-sky-700 border-b border-slate-100">造材 (単位: 10本)</div>
                     <div class="flex items-center justify-between p-1">
@@ -177,7 +187,6 @@
                         <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-sky-600 bg-sky-50 active:bg-sky-100 rounded-lg" data-target="bucking" data-amount="10"><i data-lucide="plus"></i></button>
                     </div>
                 </div>
-                <!-- 搬出 -->
                 <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                     <div class="text-center py-1 bg-green-50 text-[10px] font-bold text-green-700 border-b border-slate-100">搬出 (単位: 1台)</div>
                     <div class="flex items-center justify-between p-1">
@@ -193,31 +202,35 @@
     <!-- Sync Modal -->
     <div id="sync-modal" class="hidden fixed inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
-            <div class="bg-blue-600 p-4 flex justify-between items-center text-white">
+            <div class="bg-emerald-600 p-4 flex justify-between items-center text-white">
                 <h2 class="font-bold flex items-center gap-2"><i data-lucide="refresh-cw"></i> Sync Hub</h2>
                 <button id="btn-close-sync-modal" class="p-1"><i data-lucide="x"></i></button>
             </div>
             <div class="p-5 flex flex-col items-center gap-4">
+                <div class="text-xs text-slate-500 font-bold text-center">事務所のPCや仲間の端末で<br>このQRコードをスキャンしてください</div>
                 <div id="qrcode-container" class="bg-white p-3 border-2 border-slate-100 rounded-xl"></div>
                 
-                <!-- PCテスト用のコピペエリアを追加 -->
-                <div class="w-full mt-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                    <p class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                        <i data-lucide="monitor" class="w-3 h-3"></i> PC版テスト用ペイロード
-                    </p>
-                    <div class="flex gap-2">
-                        <input type="text" id="payload-copy-text" class="flex-1 p-2 text-xs font-mono bg-white border border-slate-300 rounded-lg outline-none" readonly>
-                        <button id="btn-copy-payload" class="px-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 active:bg-blue-300 transition-colors shadow-sm">
-                            <i data-lucide="copy" class="w-4 h-4"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <button id="btn-simulate-scan" class="w-full py-3 bg-slate-800 text-white rounded-xl font-bold shadow active:bg-slate-700 mt-2 flex justify-center items-center gap-2">
-                    <i data-lucide="camera" class="w-5 h-5"></i> 仲間のQRをスキャン(模擬)
+                <button id="btn-scan-partner" class="w-full py-4 bg-slate-800 text-white rounded-xl font-bold shadow active:bg-slate-700 mt-2 flex justify-center items-center gap-2">
+                    <i data-lucide="camera" class="w-5 h-5"></i> 仲間のQRをカメラで読込
                 </button>
+                
+                <div class="w-full mt-2 bg-slate-50 p-2 rounded-lg border border-slate-200 flex gap-2">
+                    <input type="text" id="payload-copy-text" class="flex-1 p-1 text-[10px] font-mono bg-white border border-slate-200 rounded outline-none" readonly>
+                    <button id="btn-copy-payload" class="px-2 bg-blue-50 text-blue-700 rounded text-xs"><i data-lucide="copy" class="w-3 h-3"></i></button>
+                </div>
             </div>
         </div>
+    </div>
+
+    <!-- カメラ起動用モーダル (QRリーダー) -->
+    <div id="qr-reader-modal" class="hidden fixed inset-0 bg-black/95 z-[60] flex flex-col items-center justify-center p-4">
+        <div class="text-white font-bold mb-4 flex items-center gap-2"><i data-lucide="scan-line" class="w-6 h-6"></i> QRコードをスキャン</div>
+        <div class="w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-2xl relative">
+            <div id="qr-reader" class="w-full"></div>
+        </div>
+        <button id="btn-close-qr-reader" class="mt-8 px-8 py-3 bg-white/20 text-white font-bold rounded-full border border-white/40 active:bg-white/30 backdrop-blur-sm">
+            キャンセル
+        </button>
     </div>
 
     <script>
@@ -253,30 +266,32 @@
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('map-container');
 
-        // --- Data Compression Logic (Added back for generating payload) ---
+        // --- Core Functions ---
         function compressMapData() {
-            let rle = "";
-            let count = 1;
-            let prev = gridData[0];
+            let rle = ""; let count = 1; let prev = gridData[0];
             const stateMap = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'};
-
             for (let i = 1; i < gridData.length; i++) {
-                if (gridData[i] === prev) {
-                    count++;
-                } else {
-                    rle += count + stateMap[prev];
-                    prev = gridData[i];
-                    count = 1;
-                }
+                if (gridData[i] === prev) count++;
+                else { rle += count + stateMap[prev]; prev = gridData[i]; count = 1; }
             }
             rle += count + stateMap[prev];
             return btoa(rle);
         }
 
-        // --- Initialization & Resize ---
+        function decompressMapData(base64Str) {
+            const rle = atob(base64Str); const result = new Uint8Array(GRID_SIZE * GRID_SIZE);
+            let idx = 0; const regex = /(\d+)([ABCDE])/g; let match;
+            const revMap = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4};
+            while ((match = regex.exec(rle)) !== null) {
+                let count = parseInt(match[1], 10); let val = revMap[match[2]];
+                for (let i = 0; i < count; i++) { if (idx < result.length) result[idx++] = val; }
+            }
+            return result;
+        }
+
+        // --- Rendering ---
         function resizeCanvas() {
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
+            canvas.width = container.clientWidth; canvas.height = container.clientHeight;
             resetView();
         }
 
@@ -291,10 +306,8 @@
         window.addEventListener('resize', resizeCanvas);
         document.getElementById('btn-reset-view').addEventListener('click', resetView);
 
-        // --- Rendering ---
         function renderCanvas() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
             ctx.save();
             ctx.translate(viewOffsetX, viewOffsetY);
             ctx.scale(viewScale, viewScale);
@@ -304,6 +317,7 @@
             }
 
             sitePolygons.forEach(poly => {
+                if(poly.points.length === 0) return;
                 ctx.beginPath();
                 ctx.moveTo(poly.points[0].x * LOGICAL_MAP_SIZE, poly.points[0].y * LOGICAL_MAP_SIZE);
                 for(let i=1; i<poly.points.length; i++) {
@@ -312,19 +326,12 @@
                 ctx.closePath();
                 
                 if (poly.id === selectedPolygonId) {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                    ctx.fill();
-                    ctx.strokeStyle = '#ef4444';
-                    ctx.lineWidth = 4 / viewScale;
-                    ctx.stroke();
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fill();
+                    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4 / viewScale; ctx.stroke();
                 } else {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-                    ctx.fill();
-                    ctx.strokeStyle = '#ef4444'; 
-                    ctx.lineWidth = 2 / viewScale;
-                    ctx.setLineDash([10 / viewScale, 5 / viewScale]);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; ctx.fill();
+                    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2 / viewScale;
+                    ctx.setLineDash([10 / viewScale, 5 / viewScale]); ctx.stroke(); ctx.setLineDash([]);
                 }
             });
 
@@ -339,9 +346,7 @@
             }
 
             if (isRecordMode) {
-                ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
-                ctx.lineWidth = 1 / viewScale;
-                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)'; ctx.lineWidth = 1 / viewScale; ctx.beginPath();
                 for (let i = 0; i <= GRID_SIZE; i++) {
                     ctx.moveTo(i * CELL_SIZE, 0); ctx.lineTo(i * CELL_SIZE, LOGICAL_MAP_SIZE);
                     ctx.moveTo(0, i * CELL_SIZE); ctx.lineTo(LOGICAL_MAP_SIZE, i * CELL_SIZE);
@@ -350,41 +355,30 @@
             }
 
             if (gpsPosition) {
-                const gx = gpsPosition.x * LOGICAL_MAP_SIZE;
-                const gy = gpsPosition.y * LOGICAL_MAP_SIZE;
-                ctx.beginPath(); ctx.arc(gx, gy, 14 / viewScale, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; ctx.fill();
-                ctx.beginPath(); ctx.arc(gx, gy, 6 / viewScale, 0, Math.PI * 2);
-                ctx.fillStyle = '#3b82f6'; ctx.fill();
+                const gx = gpsPosition.x * LOGICAL_MAP_SIZE; const gy = gpsPosition.y * LOGICAL_MAP_SIZE;
+                ctx.beginPath(); ctx.arc(gx, gy, 14 / viewScale, 0, Math.PI * 2); ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; ctx.fill();
+                ctx.beginPath(); ctx.arc(gx, gy, 6 / viewScale, 0, Math.PI * 2); ctx.fillStyle = '#3b82f6'; ctx.fill();
                 ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 / viewScale; ctx.stroke();
             }
-
             ctx.restore();
         }
 
+        // --- Touch / Draw Logic ---
         function getLogicalCoords(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
-            const canvasX = clientX - rect.left;
-            const canvasY = clientY - rect.top;
-            
-            const logicalX = (canvasX - viewOffsetX) / viewScale;
-            const logicalY = (canvasY - viewOffsetY) / viewScale;
-            return { x: logicalX, y: logicalY };
+            const canvasX = clientX - rect.left; const canvasY = clientY - rect.top;
+            return { x: (canvasX - viewOffsetX) / viewScale, y: (canvasY - viewOffsetY) / viewScale };
         }
 
         function getGridCoordsFromLogical(lx, ly) {
-            const gx = Math.floor(lx / CELL_SIZE);
-            const gy = Math.floor(ly / CELL_SIZE);
+            const gx = Math.floor(lx / CELL_SIZE); const gy = Math.floor(ly / CELL_SIZE);
             return { gx, gy, valid: (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) };
         }
 
         function isPointInPolygon(point, polyPoints) {
-            const px = point.x / LOGICAL_MAP_SIZE;
-            const py = point.y / LOGICAL_MAP_SIZE;
-            let inside = false;
+            const px = point.x / LOGICAL_MAP_SIZE; const py = point.y / LOGICAL_MAP_SIZE; let inside = false;
             for (let i = 0, j = polyPoints.length - 1; i < polyPoints.length; j = i++) {
-                let xi = polyPoints[i].x, yi = polyPoints[i].y;
-                let xj = polyPoints[j].x, yj = polyPoints[j].y;
+                let xi = polyPoints[i].x, yi = polyPoints[i].y; let xj = polyPoints[j].x, yj = polyPoints[j].y;
                 let intersect = ((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
                 if (intersect) inside = !inside;
             }
@@ -396,26 +390,19 @@
         function applyBrush(gx, gy) {
             if (!isRecordMode) return;
             const idx = gy * GRID_SIZE + gx;
-            if (currentBrush === 0) gridData[idx] = 0;
-            else gridData[idx] = Math.max(gridData[idx], currentBrush);
+            if (currentBrush === 0) gridData[idx] = 0; else gridData[idx] = Math.max(gridData[idx], currentBrush);
         }
 
         function drawPaintLine(lx0, ly0, lx1, ly1) {
-            const start = getGridCoordsFromLogical(lx0, ly0);
-            const end = getGridCoordsFromLogical(lx1, ly1);
+            const start = getGridCoordsFromLogical(lx0, ly0); const end = getGridCoordsFromLogical(lx1, ly1);
             if (!start.valid && !end.valid) return;
-
             let x0 = start.gx, y0 = start.gy, x1 = end.gx, y1 = end.gy;
             let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-            let sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1;
-            let err = dx - dy;
-            
+            let sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1; let err = dx - dy;
             while (true) {
                 if (x0 >= 0 && x0 < GRID_SIZE && y0 >= 0 && y0 < GRID_SIZE) applyBrush(x0, y0);
                 if (x0 === x1 && y0 === y1) break;
-                let e2 = 2 * err;
-                if (e2 > -dy) { err -= dy; x0 += sx; }
-                if (e2 < dx) { err += dx; y0 += sy; }
+                let e2 = 2 * err; if (e2 > -dy) { err -= dy; x0 += sx; } if (e2 < dx) { err += dx; y0 += sy; }
             }
         }
 
@@ -423,344 +410,336 @@
             e.preventDefault();
             if (e.touches.length === 1) {
                 touchState.startX = e.touches[0].clientX; touchState.startY = e.touches[0].clientY;
-                touchState.lastX = touchState.startX; touchState.lastY = touchState.startY;
-                touchState.moved = false;
-
+                touchState.lastX = touchState.startX; touchState.lastY = touchState.startY; touchState.moved = false;
                 if (isRecordMode) {
-                    touchState.mode = 'paint';
-                    const lc = getLogicalCoords(touchState.startX, touchState.startY);
-                    const gc = getGridCoordsFromLogical(lc.x, lc.y);
-                    if (gc.valid) { applyBrush(gc.gx, gc.gy); renderCanvas(); }
-                } else {
-                    touchState.mode = 'pan';
-                }
+                    touchState.mode = 'paint'; const lc = getLogicalCoords(touchState.startX, touchState.startY);
+                    const gc = getGridCoordsFromLogical(lc.x, lc.y); if (gc.valid) { applyBrush(gc.gx, gc.gy); renderCanvas(); }
+                } else touchState.mode = 'pan';
             } else if (e.touches.length === 2) {
                 touchState.mode = 'pinch';
-                let dx = e.touches[0].clientX - e.touches[1].clientX;
-                let dy = e.touches[0].clientY - e.touches[1].clientY;
-                touchState.startDist = Math.hypot(dx, dy);
-                touchState.startScale = viewScale;
-                touchState.lastX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                touchState.lastY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                let dx = e.touches[0].clientX - e.touches[1].clientX; let dy = e.touches[0].clientY - e.touches[1].clientY;
+                touchState.startDist = Math.hypot(dx, dy); touchState.startScale = viewScale;
+                touchState.lastX = (e.touches[0].clientX + e.touches[1].clientX) / 2; touchState.lastY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
             }
         }, { passive: false });
 
         canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (touchState.mode === 'none') return;
+            e.preventDefault(); if (touchState.mode === 'none') return;
             touchState.moved = true;
-
             if (touchState.mode === 'paint' && e.touches.length === 1) {
-                const currentX = e.touches[0].clientX; const currentY = e.touches[0].clientY;
-                const lastLc = getLogicalCoords(touchState.lastX, touchState.lastY);
-                const currLc = getLogicalCoords(currentX, currentY);
-                drawPaintLine(lastLc.x, lastLc.y, currLc.x, currLc.y);
-                touchState.lastX = currentX; touchState.lastY = currentY;
-                renderCanvas();
-            } 
-            else if (touchState.mode === 'pan' && e.touches.length === 1) {
-                const currentX = e.touches[0].clientX; const currentY = e.touches[0].clientY;
+                const currentX = e.touches[0].clientX, currentY = e.touches[0].clientY;
+                drawPaintLine(getLogicalCoords(touchState.lastX, touchState.lastY).x, getLogicalCoords(touchState.lastX, touchState.lastY).y, getLogicalCoords(currentX, currentY).x, getLogicalCoords(currentX, currentY).y);
+                touchState.lastX = currentX; touchState.lastY = currentY; renderCanvas();
+            } else if (touchState.mode === 'pan' && e.touches.length === 1) {
+                const currentX = e.touches[0].clientX, currentY = e.touches[0].clientY;
                 viewOffsetX += (currentX - touchState.lastX); viewOffsetY += (currentY - touchState.lastY);
-                touchState.lastX = currentX; touchState.lastY = currentY;
-                renderCanvas();
-            }
-            else if (touchState.mode === 'pinch' && e.touches.length === 2) {
-                let dx = e.touches[0].clientX - e.touches[1].clientX;
-                let dy = e.touches[0].clientY - e.touches[1].clientY;
-                let currentDist = Math.hypot(dx, dy);
-                let currentCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                let currentCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
+                touchState.lastX = currentX; touchState.lastY = currentY; renderCanvas();
+            } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
+                let currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                let cx = (e.touches[0].clientX + e.touches[1].clientX) / 2, cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                 let newScale = Math.max(0.1, Math.min(touchState.startScale * (currentDist / touchState.startDist), 10));
                 let scaleRatio = newScale / viewScale;
-                viewOffsetX = currentCenterX - (currentCenterX - viewOffsetX) * scaleRatio;
-                viewOffsetY = currentCenterY - (currentCenterY - viewOffsetY) * scaleRatio;
-                viewScale = newScale;
-
-                viewOffsetX += (currentCenterX - touchState.lastX);
-                viewOffsetY += (currentCenterY - touchState.lastY);
-
-                touchState.lastX = currentCenterX; touchState.lastY = currentCenterY;
-                renderCanvas();
+                viewOffsetX = cx - (cx - viewOffsetX) * scaleRatio; viewOffsetY = cy - (cy - viewOffsetY) * scaleRatio;
+                viewScale = newScale; viewOffsetX += (cx - touchState.lastX); viewOffsetY += (cy - touchState.lastY);
+                touchState.lastX = cx; touchState.lastY = cy; renderCanvas();
             }
         }, { passive: false });
 
         canvas.addEventListener('touchend', (e) => {
             if (!isRecordMode && touchState.mode === 'pan' && !touchState.moved) {
-                const lc = getLogicalCoords(touchState.startX, touchState.startY);
-                let hitId = null;
+                const lc = getLogicalCoords(touchState.startX, touchState.startY); let hitId = null;
                 for (let i = sitePolygons.length - 1; i >= 0; i--) {
-                    if (isPointInPolygon(lc, sitePolygons[i].points)) {
-                        hitId = sitePolygons[i].id; break;
-                    }
+                    if (isPointInPolygon(lc, sitePolygons[i].points)) { hitId = sitePolygons[i].id; break; }
                 }
-                if (hitId) selectPolygon(hitId);
-                else {
-                    document.getElementById('property-card').classList.add('hidden');
-                    selectedPolygonId = null; renderCanvas();
-                }
+                if (hitId) selectPolygon(hitId); else { document.getElementById('property-card').classList.add('hidden'); selectedPolygonId = null; renderCanvas(); }
             }
             if (e.touches.length === 0) touchState.mode = 'none';
         });
 
-        // Mouse Fallback for PC testing
-        let isMouseDown = false;
-        canvas.addEventListener('mousedown', e => { isMouseDown = true; touchState.lastX = e.clientX; touchState.lastY = e.clientY; });
-        canvas.addEventListener('mousemove', e => {
-            if(!isMouseDown) return;
-            if(isRecordMode) {
-                const lastLc = getLogicalCoords(touchState.lastX, touchState.lastY);
-                const currLc = getLogicalCoords(e.clientX, e.clientY);
-                drawPaintLine(lastLc.x, lastLc.y, currLc.x, currLc.y);
+        // --- GeoTIFF / Image File Loading ---
+        document.getElementById('map-upload').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            
+            if (ext === 'tif' || ext === 'tiff') {
+                try {
+                    const tiff = await GeoTIFF.fromBlob(file);
+                    const image = await tiff.getImage();
+                    const width = image.getWidth();
+                    const height = image.getHeight();
+                    const rasters = await image.readRasters();
+                    
+                    const offCanvas = document.createElement('canvas');
+                    offCanvas.width = width; offCanvas.height = height;
+                    const offCtx = offCanvas.getContext('2d');
+                    const imgData = offCtx.createImageData(width, height);
+                    
+                    for (let i = 0; i < width * height; i++) {
+                        const r = rasters[0][i];
+                        const g = rasters.length >= 3 ? rasters[1][i] : r;
+                        const b = rasters.length >= 3 ? rasters[2][i] : r;
+                        const a = rasters.length >= 4 ? rasters[3][i] : 255;
+                        imgData.data[i*4]=r; imgData.data[i*4+1]=g; imgData.data[i*4+2]=b; imgData.data[i*4+3]=a;
+                    }
+                    offCtx.putImageData(imgData, 0, 0);
+                    
+                    const img = new Image();
+                    img.onload = () => { bgMapImage = img; resetView(); };
+                    img.src = offCanvas.toDataURL();
+                    alert("GeoTIFF画像を読み込みました。");
+                } catch (err) {
+                    console.error(err);
+                    alert("GeoTIFFの解析に失敗しました: " + err.message);
+                }
             } else {
-                viewOffsetX += (e.clientX - touchState.lastX); viewOffsetY += (e.clientY - touchState.lastY);
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => { bgMapImage = img; resetView(); };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
             }
-            touchState.lastX = e.clientX; touchState.lastY = e.clientY;
-            renderCanvas();
+            document.getElementById('side-menu').classList.replace('menu-open', 'menu-closed');
+            e.target.value = '';
         });
-        canvas.addEventListener('mouseup', () => { isMouseDown = false; });
-        canvas.addEventListener('wheel', e => {
-            e.preventDefault();
-            const zoom = e.deltaY < 0 ? 1.1 : 0.9;
-            viewOffsetX = e.clientX - (e.clientX - viewOffsetX) * zoom;
-            viewOffsetY = e.clientY - (e.clientY - viewOffsetY) * zoom;
-            viewScale *= zoom;
-            renderCanvas();
-        }, {passive: false});
 
+        // --- Camera & QR Reader Logic ---
+        let html5QrCode;
+        let qrScanCallback = null;
+
+        function startQrReader(onSuccess) {
+            qrScanCallback = onSuccess;
+            document.getElementById('qr-reader-modal').classList.remove('hidden');
+            
+            html5QrCode = new Html5Qrcode("qr-reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            
+            html5QrCode.start({ facingMode: "environment" }, config, 
+                (decodedText) => {
+                    stopQrReader();
+                    if(qrScanCallback) qrScanCallback(decodedText);
+                },
+                (errorMessage) => { /* ignore parse errors */ }
+            ).catch(err => {
+                alert("カメラの起動に失敗しました。ブラウザのカメラ権限を確認してください。");
+                stopQrReader();
+            });
+        }
+
+        function stopQrReader() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    html5QrCode.clear();
+                    document.getElementById('qr-reader-modal').classList.add('hidden');
+                }).catch(err => {
+                    document.getElementById('qr-reader-modal').classList.add('hidden');
+                });
+            } else {
+                document.getElementById('qr-reader-modal').classList.add('hidden');
+            }
+        }
+        
+        document.getElementById('btn-close-qr-reader').addEventListener('click', stopQrReader);
+
+        // --- 現場看板スキャン処理 (チェックイン) ---
+        document.getElementById('btn-scan-checkin').addEventListener('click', () => {
+            document.getElementById('side-menu').classList.replace('menu-open', 'menu-closed');
+            startQrReader(processSignboardQR);
+        });
+
+        function processSignboardQR(decodedText) {
+            try {
+                const data = JSON.parse(decodedText);
+                if(data.type !== 'checkin') throw new Error("無効なQR形式です");
+                
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                let validPointsFound = false;
+                
+                if (data.geom && data.geom.features) {
+                    data.geom.features.forEach(f => {
+                        let coords = [];
+                        if(f.geometry.type === 'Polygon') coords = f.geometry.coordinates[0];
+                        else if(f.geometry.type === 'MultiPolygon') coords = f.geometry.coordinates[0][0];
+                        
+                        coords.forEach(p => {
+                            minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]);
+                            maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]);
+                            validPointsFound = true;
+                        });
+                    });
+                }
+                
+                let relPoints = [];
+                if (validPointsFound) {
+                    const w = maxX - minX; const h = maxY - minY;
+                    const padX = w * 0.1 || 100; const padY = h * 0.1 || 100;
+                    const effMinX = minX - padX, effMaxX = maxX + padX;
+                    const effMinY = minY - padY, effMaxY = maxY + padY;
+                    const effW = effMaxX - effMinX, effH = effMaxY - effMinY;
+
+                    data.geom.features.forEach(f => {
+                        let coords = [];
+                        if(f.geometry.type === 'Polygon') coords = f.geometry.coordinates[0];
+                        else if(f.geometry.type === 'MultiPolygon') coords = f.geometry.coordinates[0][0];
+                        
+                        coords.forEach(p => {
+                            let rx = (p[0] - effMinX) / effW;
+                            let ry = 1.0 - ((p[1] - effMinY) / effH); // WebメルカトルY反転
+                            relPoints.push({x: rx, y: ry});
+                        });
+                    });
+                } else {
+                    relPoints = [{x: 0.2, y: 0.2}, {x: 0.8, y: 0.2}, {x: 0.8, y: 0.8}, {x: 0.2, y: 0.8}];
+                }
+
+                const newPoly = { id: data.id || 'Unknown', name: data.name || '新規現場', points: relPoints };
+                sitePolygons.push(newPoly);
+                updatePolygonList();
+                selectPolygon(newPoly.id);
+                resetView();
+                alert(`「${newPoly.name}」のデータをセットしました。`);
+
+            } catch(e) {
+                console.error(e);
+                alert("読み込みに失敗しました。正しい林業GIS Proの現場看板QRか確認してください。");
+            }
+        }
+
+        // --- 仲間のQRスキャン処理 (マージ) ---
+        document.getElementById('btn-scan-partner').addEventListener('click', () => {
+            document.getElementById('sync-modal').classList.add('hidden');
+            startQrReader(processPartnerQR);
+        });
+
+        function processPartnerQR(decodedText) {
+            try {
+                const data = JSON.parse(decodedText);
+                if(!data.p || !data.c) throw new Error("無効なQR形式です");
+                
+                const incomingGrid = decompressMapData(data.p);
+                for (let i = 0; i < gridData.length; i++) {
+                    gridData[i] = Math.max(gridData[i], incomingGrid[i]);
+                }
+                
+                counters.felling += data.c[0] || 0;
+                counters.yarding += data.c[1] || 0;
+                counters.bucking += data.c[2] || 0;
+                counters.forwarding += data.c[3] || 0;
+                
+                updateCountersUI();
+                renderCanvas();
+                alert("仲間の進捗データをマージ（合体）しました！");
+
+            } catch(e) {
+                console.error(e);
+                alert("読み込みに失敗しました。正しい進捗データQRか確認してください。");
+            }
+        }
+
+        // --- UI & Interactions ---
         function selectPolygon(id) {
-            selectedPolygonId = id;
-            const poly = sitePolygons.find(p => p.id === id);
+            selectedPolygonId = id; const poly = sitePolygons.find(p => p.id === id);
             if (poly) {
                 document.getElementById('prop-site-name').textContent = poly.name;
                 document.getElementById('prop-site-id').textContent = poly.id;
-                document.getElementById('prop-site-area').textContent = poly.area;
-                document.getElementById('prop-team').textContent = poly.team;
                 document.getElementById('property-card').classList.remove('hidden');
-                
-                document.getElementById('side-menu').classList.remove('menu-open');
-                document.getElementById('side-menu').classList.add('menu-closed');
+                document.getElementById('side-menu').classList.replace('menu-open', 'menu-closed');
             }
             renderCanvas();
         }
 
-        document.getElementById('btn-close-prop').addEventListener('click', () => {
-            document.getElementById('property-card').classList.add('hidden');
-            selectedPolygonId = null; renderCanvas();
-        });
+        document.getElementById('btn-close-prop').addEventListener('click', () => { document.getElementById('property-card').classList.add('hidden'); selectedPolygonId = null; renderCanvas(); });
 
         const sideMenu = document.getElementById('side-menu');
-        document.getElementById('btn-toggle-menu').addEventListener('click', () => {
-            sideMenu.classList.remove('menu-closed'); sideMenu.classList.add('menu-open');
-        });
-        document.getElementById('btn-close-menu').addEventListener('click', () => {
-            sideMenu.classList.remove('menu-open'); sideMenu.classList.add('menu-closed');
-        });
+        document.getElementById('btn-toggle-menu').addEventListener('click', () => sideMenu.classList.replace('menu-closed', 'menu-open'));
+        document.getElementById('btn-close-menu').addEventListener('click', () => sideMenu.classList.replace('menu-open', 'menu-closed'));
 
         function updatePolygonList() {
             const list = document.getElementById('polygon-list');
             if (sitePolygons.length === 0) return;
-            
             list.innerHTML = '';
             sitePolygons.forEach(poly => {
                 const li = document.createElement('li');
                 li.className = "p-3 hover:bg-slate-700 active:bg-slate-600 cursor-pointer flex justify-between items-center transition-colors";
-                li.innerHTML = `
-                    <div>
-                        <div class="text-sm font-bold text-white">${poly.name}</div>
-                        <div class="text-xs text-slate-400">${poly.id}</div>
-                    </div>
-                    <i data-lucide="chevron-right" class="w-4 h-4 text-slate-500"></i>
-                `;
+                li.innerHTML = `<div><div class="text-sm font-bold text-white">${poly.name}</div><div class="text-xs text-slate-400">${poly.id}</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-slate-500"></i>`;
                 li.addEventListener('click', () => selectPolygon(poly.id));
                 list.appendChild(li);
             });
             lucide.createIcons({ root: list });
         }
 
-        document.getElementById('btn-simulate-checkin').addEventListener('click', () => {
-            sitePolygons = [
-                { id: 'PRJ-2026-A', name: '清水山林 (東エリア)', area: 4.2, team: 'Aチーム', points: [{x: 0.1, y: 0.1}, {x: 0.5, y: 0.2}, {x: 0.4, y: 0.6}, {x: 0.2, y: 0.5}] },
-                { id: 'PRJ-2026-B', name: '清水山林 (西エリア)', area: 2.8, team: 'Bチーム', points: [{x: 0.6, y: 0.3}, {x: 0.9, y: 0.3}, {x: 0.8, y: 0.8}, {x: 0.5, y: 0.7}] }
-            ];
-            updatePolygonList();
-            resetView();
-            
-            const btn = document.getElementById('btn-simulate-checkin');
-            btn.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6"></i> 読込完了`;
-            btn.classList.replace('bg-blue-600', 'bg-emerald-600');
-            lucide.createIcons({root: btn});
-            setTimeout(() => {
-                btn.innerHTML = `<i data-lucide="qr-code" class="w-6 h-6"></i> 現場看板QRをスキャン<br><span class="text-xs font-normal text-emerald-200">(現場データを読み込む)</span>`;
-                btn.classList.replace('bg-emerald-600', 'bg-blue-600');
-                lucide.createIcons({root: btn});
-            }, 2000);
-        });
-
         const recordSheet = document.getElementById('record-sheet');
         const fab = document.getElementById('btn-open-record');
-        
-        document.getElementById('btn-open-record').addEventListener('click', () => {
-            isRecordMode = true;
-            recordSheet.classList.remove('drawer-closed'); recordSheet.classList.add('drawer-open');
-            document.getElementById('map-container').classList.add('record-mode-active');
-            fab.style.display = 'none';
-            renderCanvas();
-        });
-        
-        document.getElementById('btn-close-record').addEventListener('click', () => {
-            isRecordMode = false;
-            recordSheet.classList.remove('drawer-open'); recordSheet.classList.add('drawer-closed');
-            document.getElementById('map-container').classList.remove('record-mode-active');
-            fab.style.display = 'flex';
-            renderCanvas();
-        });
+        document.getElementById('btn-open-record').addEventListener('click', () => { isRecordMode = true; recordSheet.classList.replace('drawer-closed', 'drawer-open'); document.getElementById('map-container').classList.add('record-mode-active'); fab.style.display = 'none'; renderCanvas(); });
+        document.getElementById('btn-close-record').addEventListener('click', () => { isRecordMode = false; recordSheet.classList.replace('drawer-open', 'drawer-closed'); document.getElementById('map-container').classList.remove('record-mode-active'); fab.style.display = 'flex'; renderCanvas(); });
 
-        const tabPaint = document.getElementById('tab-paint');
-        const tabCounter = document.getElementById('tab-counter');
-        const contentPaint = document.getElementById('content-paint');
-        const contentCounter = document.getElementById('content-counter');
-
+        const tabPaint = document.getElementById('tab-paint'), tabCounter = document.getElementById('tab-counter');
+        const contentPaint = document.getElementById('content-paint'), contentCounter = document.getElementById('content-counter');
         function switchTab(mode) {
             if (mode === 'paint') {
                 tabPaint.className = "flex-1 py-2.5 text-yellow-600 border-b-2 border-yellow-500 bg-yellow-50 flex justify-center items-center gap-2 transition-colors";
                 tabCounter.className = "flex-1 py-2.5 text-slate-500 border-b-2 border-transparent hover:bg-slate-50 flex justify-center items-center gap-2 transition-colors";
-                contentPaint.classList.remove('hidden');
-                contentCounter.classList.add('hidden');
-                contentCounter.classList.remove('grid');
+                contentPaint.classList.remove('hidden'); contentCounter.classList.replace('grid', 'hidden');
             } else {
                 tabCounter.className = "flex-1 py-2.5 text-blue-600 border-b-2 border-blue-500 bg-blue-50 flex justify-center items-center gap-2 transition-colors";
                 tabPaint.className = "flex-1 py-2.5 text-slate-500 border-b-2 border-transparent hover:bg-slate-50 flex justify-center items-center gap-2 transition-colors";
-                contentCounter.classList.remove('hidden');
-                contentCounter.classList.add('grid');
-                contentPaint.classList.add('hidden');
+                contentCounter.classList.replace('hidden', 'grid'); contentPaint.classList.add('hidden');
             }
         }
-
-        tabPaint.addEventListener('click', () => switchTab('paint'));
-        tabCounter.addEventListener('click', () => switchTab('counter'));
+        tabPaint.addEventListener('click', () => switchTab('paint')); tabCounter.addEventListener('click', () => switchTab('counter'));
 
         function updateCountersUI() {
-            document.getElementById('sheet-count-felling').textContent = counters.felling;
-            document.getElementById('sheet-count-yarding').textContent = counters.yarding;
-            document.getElementById('sheet-count-bucking').textContent = counters.bucking;
-            document.getElementById('sheet-count-forwarding').textContent = counters.forwarding;
-            
-            document.getElementById('menu-felling').textContent = counters.felling;
-            document.getElementById('menu-yarding').textContent = counters.yarding;
-            document.getElementById('menu-bucking').textContent = counters.bucking;
-            document.getElementById('menu-forwarding').textContent = counters.forwarding;
+            ['felling', 'yarding', 'bucking', 'forwarding'].forEach(k => {
+                document.getElementById(`sheet-count-${k}`).textContent = counters[k];
+                document.getElementById(`menu-${k}`).textContent = counters[k];
+            });
         }
 
-        document.querySelectorAll('.btn-counter-inc').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const target = e.currentTarget.getAttribute('data-target');
-                const amount = parseInt(e.currentTarget.getAttribute('data-amount'));
-                counters[target] += amount; updateCountersUI();
-            });
-        });
-
-        document.querySelectorAll('.btn-counter-dec').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const target = e.currentTarget.getAttribute('data-target');
-                const amount = parseInt(e.currentTarget.getAttribute('data-amount'));
-                if (counters[target] >= amount) { counters[target] -= amount; updateCountersUI(); }
-            });
-        });
+        document.querySelectorAll('.btn-counter-inc').forEach(btn => btn.addEventListener('click', (e) => { counters[e.currentTarget.dataset.target] += parseInt(e.currentTarget.dataset.amount); updateCountersUI(); }));
+        document.querySelectorAll('.btn-counter-dec').forEach(btn => btn.addEventListener('click', (e) => { const t = e.currentTarget.dataset.target, a = parseInt(e.currentTarget.dataset.amount); if (counters[t] >= a) { counters[t] -= a; updateCountersUI(); } }));
 
         function updateBrushUI() {
             [1, 2, 3, 4, 0].forEach(val => {
                 const el = document.getElementById(`btn-brush-${val}`);
-                el.classList.remove('border-slate-800', 'scale-105');
-                if (currentBrush === val) el.classList.add('border-slate-800', 'scale-105');
+                el.classList.remove('border-slate-800', 'scale-105'); if (currentBrush === val) el.classList.add('border-slate-800', 'scale-105');
             });
         }
-        [1, 2, 3, 4, 0].forEach(val => {
-            document.getElementById(`btn-brush-${val}`).addEventListener('click', () => {
-                currentBrush = val; updateBrushUI();
-            });
-        });
-
-        document.getElementById('map-upload').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => { bgMapImage = img; renderCanvas(); };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        });
+        [1, 2, 3, 4, 0].forEach(val => document.getElementById(`btn-brush-${val}`).addEventListener('click', () => { currentBrush = val; updateBrushUI(); }));
 
         document.getElementById('btn-toggle-gps').addEventListener('click', () => {
-            const btn = document.getElementById('btn-toggle-gps');
-            const icon = document.getElementById('icon-gps');
+            const btn = document.getElementById('btn-toggle-gps'), icon = document.getElementById('icon-gps');
             if (!gpsWatchId) {
-                btn.classList.replace('bg-white/90', 'bg-blue-600');
-                icon.classList.replace('text-slate-700', 'text-white');
-                let mockX = 0.5, mockY = 0.5;
-                gpsWatchId = setInterval(() => {
-                    mockX += (Math.random() - 0.5) * 0.02; mockY += (Math.random() - 0.5) * 0.02;
-                    gpsPosition = { x: mockX, y: mockY };
-                    renderCanvas();
-                }, 1000);
+                btn.classList.replace('bg-white/90', 'bg-blue-600'); icon.classList.replace('text-slate-700', 'text-white');
+                let mx = 0.5, my = 0.5;
+                gpsWatchId = setInterval(() => { mx += (Math.random()-0.5)*0.02; my += (Math.random()-0.5)*0.02; gpsPosition = {x:mx, y:my}; renderCanvas(); }, 1000);
             } else {
                 clearInterval(gpsWatchId); gpsWatchId = null; gpsPosition = null;
-                btn.classList.replace('bg-blue-600', 'bg-white/90');
-                icon.classList.replace('text-white', 'text-slate-700');
-                renderCanvas();
+                btn.classList.replace('bg-blue-600', 'bg-white/90'); icon.classList.replace('text-white', 'text-slate-700'); renderCanvas();
             }
         });
 
-        // --- Sync Modal & Test Copy Functionality ---
+        // --- Sync Modal ---
         const syncModal = document.getElementById('sync-modal');
         document.getElementById('btn-show-sync').addEventListener('click', () => {
-            sideMenu.classList.remove('menu-open'); sideMenu.classList.add('menu-closed');
-            
-            // データを圧縮してペイロードJSONを作成
-            const payload = {
-                p: compressMapData(),
-                c: [counters.felling, counters.yarding, counters.bucking, counters.forwarding]
-            };
-            const payloadStr = JSON.stringify(payload);
-            
-            // テスト用コピーエリアに文字列をセット
+            sideMenu.classList.replace('menu-open', 'menu-closed');
+            const payloadStr = JSON.stringify({ p: compressMapData(), c: [counters.felling, counters.yarding, counters.bucking, counters.forwarding] });
             document.getElementById('payload-copy-text').value = payloadStr;
-
-            // QRコード生成
             const qrContainer = document.getElementById('qrcode-container');
-            qrContainer.innerHTML = '';
-            new QRCode(qrContainer, { text: payloadStr, width: 200, height: 200 });
-            
+            qrContainer.innerHTML = ''; new QRCode(qrContainer, { text: payloadStr, width: 200, height: 200 });
             syncModal.classList.remove('hidden');
         });
 
         document.getElementById('btn-close-sync-modal').addEventListener('click', () => syncModal.classList.add('hidden'));
-        
-        document.getElementById('btn-simulate-scan').addEventListener('click', () => {
-            alert("他端末のQRをスキャンしてデータを合体しました！"); syncModal.classList.add('hidden');
-        });
-
-        // コピーボタンの処理
         document.getElementById('btn-copy-payload').addEventListener('click', () => {
-            const copyText = document.getElementById('payload-copy-text');
-            copyText.select();
-            document.execCommand('copy');
-            
-            const btn = document.getElementById('btn-copy-payload');
-            btn.innerHTML = '<i data-lucide="check" class="w-4 h-4 text-emerald-600"></i>';
-            lucide.createIcons({root: btn.parentElement});
-            
-            setTimeout(() => {
-                btn.innerHTML = '<i data-lucide="copy" class="w-4 h-4"></i>';
-                lucide.createIcons({root: btn.parentElement});
-            }, 2000);
+            const t = document.getElementById('payload-copy-text'); t.select(); document.execCommand('copy');
+            const b = document.getElementById('btn-copy-payload'); b.innerHTML = '<i data-lucide="check" class="w-3 h-3 text-emerald-600"></i>'; lucide.createIcons({root: b.parentElement});
+            setTimeout(() => { b.innerHTML = '<i data-lucide="copy" class="w-3 h-3"></i>'; lucide.createIcons({root: b.parentElement}); }, 2000);
         });
 
         // Init
-        resizeCanvas();
-        updateBrushUI();
+        resizeCanvas(); updateBrushUI();
     </script>
 </body>
 </html>
