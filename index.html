@@ -727,7 +727,13 @@
             const payloadStr = JSON.stringify({ p: compressMapData(), c: [counters.felling, counters.yarding, counters.bucking, counters.forwarding] });
             document.getElementById('payload-copy-text').value = payloadStr;
             const qrContainer = document.getElementById('qrcode-container');
-            qrContainer.innerHTML = ''; new QRCode(qrContainer, { text: payloadStr, width: 200, height: 200 });
+　　　　　　 qrContainer.innerHTML = ''; 
+            new QRCode(qrContainer, { 
+            text: payloadStr, 
+            width: 250, 
+            height: 250, 
+            correctLevel : QRCode.CorrectLevel.L  // ← これを追加（ドットが粗くなり読み取りやすくなる）
+        });
             syncModal.classList.remove('hidden');
         });
 
