@@ -1015,11 +1015,10 @@
                         const code = jsQR(imageData.data, width, height, { inversionAttempts: "dontInvert" });
                         if (code && code.data) {
                             QR.handleResult(code.data);
-                            return;
                         }
                     }
                 }
-                QR.frameRequestId = requestAnimationFrame(QR.scanLoop);
+                if (QR.scanning) QR.frameRequestId = requestAnimationFrame(QR.scanLoop);
             },
             scanImageFile: (event) => {
                 const file = event.target.files[0];
