@@ -3,749 +3,1131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>林業GIS Pro - モバイル版</title>
+    <title>林業GIS Pro (Forestry Scout)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- カメラによるQRスキャン用 -->
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <!-- GeoTIFF読み込み用 -->
+    <!-- GeoTIFF解析とQRコード生成ライブラリ -->
     <script src="https://cdn.jsdelivr.net/npm/geotiff"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- QRコード読取(jsQR) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
     <style>
-        body { overscroll-behavior-y: none; user-select: none; -webkit-user-select: none; touch-action: none; }
-        .map-bg { background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        .drawer-open { transform: translateY(0); }
-        .drawer-closed { transform: translateY(100%); }
-        .menu-open { transform: translateX(0); }
-        .menu-closed { transform: translateX(100%); }
-        
-        .record-mode-active { box-shadow: inset 0 0 0 4px #eab308; }
-        #qr-reader video { object-fit: cover !important; border-radius: 12px; }
+        body { 
+            touch-action: none; 
+            overflow: hidden; 
+            background-color: #0f172a; 
+            user-select: none;
+            -webkit-user-select: none;
+            overscroll-behavior: none; /* iOSのスワイプバック等を防止 */
+        }
+        .transition-transform { transition-property: transform; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 300ms; }
+        .pop-anim { animation: pop 0.2s ease-out; }
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); color: #60a5fa; }
+            100% { transform: scale(1); }
+        }
+        .sheet-collapsed { transform: translateY(calc(100% - 70px)) !important; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        /* カスタムQRスキャナーUI用スタイル */
+        #qr-reader video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #qr-reader .qr-frame {
+            position: absolute;
+            inset: 12%;
+            border: 2px solid #22c55e;
+            border-radius: 12px;
+            box-shadow: 0 0 24px rgba(34, 197, 94, 0.6);
+            pointer-events: none;
+        }
     </style>
 </head>
-<body class="bg-slate-900 h-[100dvh] w-screen overflow-hidden font-sans text-slate-800 relative">
+<body class="text-slate-200 font-sans">
 
-    <!-- Layer 1: Map -->
-    <main id="map-container" class="absolute inset-0 map-bg flex justify-center items-center overflow-hidden transition-shadow duration-300">
-        <canvas id="mapCanvas" class="bg-transparent touch-none"></canvas>
-    </main>
+    <!-- 1. メインCanvas -->
+    <canvas id="mapCanvas" class="fixed inset-0 w-full h-full z-0"></canvas>
 
-    <!-- Layer 2: Overlays -->
-    <div id="property-card" class="hidden absolute top-4 left-4 right-16 bg-white/95 backdrop-blur-sm p-3 rounded-2xl shadow-lg border border-slate-200 pointer-events-auto transition-opacity z-20">
-        <button id="btn-close-prop" class="absolute top-2 right-2 p-1 text-slate-400 active:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-        <div class="flex items-start gap-3">
-            <div class="bg-emerald-100 p-2 rounded-xl text-emerald-600"><i data-lucide="map-pin" class="w-6 h-6"></i></div>
-            <div class="pr-6">
-                <h2 class="text-sm font-bold text-slate-800" id="prop-site-name">-</h2>
-                <div class="grid grid-cols-2 gap-x-4 mt-1 text-xs text-slate-500">
-                    <p>ID: <span id="prop-site-id" class="font-mono text-slate-700">-</span></p>
-                    <p>現場枠: <span class="text-slate-700 font-bold">セット済</span></p>
-                </div>
-            </div>
+    <!-- 2. ヘッダー -->
+    <header id="app-header" class="fixed top-0 inset-x-0 h-14 bg-slate-900/80 backdrop-blur-md border-b border-slate-700 flex items-center justify-between px-4 z-40 transition-transform">
+        <div class="flex items-center gap-2 overflow-hidden" onclick="UI.toggleSideMenu(true)">
+            <!-- 現場アイコン -->
+            <svg class="w-5 h-5 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span id="header-site-name" class="font-bold text-sm truncate">⚠ 現場看板QRをスキャンしてください</span>
         </div>
-    </div>
+    </header>
 
-    <div class="absolute top-4 right-4 flex flex-col gap-3 z-20">
-        <button id="btn-toggle-menu" class="w-12 h-12 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex justify-center items-center text-slate-700 active:bg-slate-200 transition-colors">
-            <i data-lucide="menu" class="w-6 h-6"></i>
+    <!-- 3. FAB (右上のアクションボタン) -->
+    <div class="fixed right-4 top-20 flex flex-col gap-3 z-30">
+        <!-- メニューボタン -->
+        <button onclick="UI.toggleSideMenu(true)" class="w-12 h-12 bg-slate-800 rounded-full shadow-lg border border-slate-600 flex items-center justify-center active:bg-slate-700">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <button id="btn-toggle-gps" class="w-12 h-12 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex justify-center items-center text-slate-700 active:bg-slate-200 transition-colors">
-            <i data-lucide="navigation" id="icon-gps" class="w-6 h-6"></i>
+        <!-- GPS 現在地ボタン (ナビゲーション矢印に変更) -->
+        <button onclick="MAP.centerOnGPS()" class="w-12 h-12 bg-slate-800 rounded-full shadow-lg border border-slate-600 flex items-center justify-center active:bg-slate-700">
+            <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
         </button>
-        <button id="btn-reset-view" class="w-12 h-12 bg-white/90 backdrop-blur-sm rounded-full shadow-lg flex justify-center items-center text-slate-700 active:bg-slate-200 transition-colors">
-            <i data-lucide="focus" class="w-6 h-6"></i>
+        <!-- QR スキャンボタン (カメラアイコンに変更) -->
+        <button onclick="QR.startScan()" class="w-12 h-12 bg-blue-600 rounded-full shadow-lg border border-blue-500 flex items-center justify-center active:bg-blue-500">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         </button>
     </div>
 
-    <button id="btn-open-record" class="absolute bottom-8 right-6 px-5 py-4 bg-yellow-500 text-yellow-950 font-bold rounded-full shadow-[0_10px_25px_-5px_rgba(234,179,8,0.5)] active:scale-95 transition-all flex items-center gap-2 border-2 border-yellow-300 z-20">
-        <i data-lucide="edit-3" class="w-6 h-6"></i>
-        <span class="text-base tracking-wide">作業記録</span>
-    </button>
+    <!-- 4. 作業記録開始ボタン -->
+    <div id="btn-open-record" class="fixed right-4 bottom-6 z-30">
+        <button onclick="UI.openBottomSheet()" class="w-16 h-16 bg-green-600 text-white rounded-full shadow-2xl border-2 border-green-400 flex items-center justify-center active:scale-95 transition-transform">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+        </button>
+    </div>
 
-    <!-- Layer 3: Drawers -->
-    <div id="side-menu" class="absolute top-0 right-0 h-full w-72 bg-slate-900 text-white shadow-2xl menu-closed transition-transform duration-300 z-40 flex flex-col">
-        <div class="p-5 flex justify-between items-center border-b border-slate-700 shrink-0">
-            <h3 class="font-bold text-lg">メニュー・管理</h3>
-            <button id="btn-close-menu" class="p-2 text-slate-400 active:text-white"><i data-lucide="x"></i></button>
+    <!-- 5. 記録モード (スマート・ボトムシート) -->
+    <div id="bottom-sheet" class="fixed inset-x-0 bottom-0 bg-slate-900 border-t border-slate-700 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-50 transform translate-y-full transition-transform duration-300 flex flex-col h-[65vh]">
+        <div class="h-16 flex items-center justify-between px-6 border-b border-slate-700 bg-slate-800 rounded-t-3xl" onclick="UI.expandBottomSheet()">
+            <div class="flex flex-col">
+                <div class="w-10 h-1 bg-slate-500 rounded-full mb-1 mx-auto"></div>
+                <span id="current-tool-label" class="text-sm font-bold text-slate-300">モードを選択してください</span>
+            </div>
+            <button onclick="UI.closeBottomSheet(event)" class="px-4 py-2 bg-slate-700 rounded-lg text-sm font-bold active:bg-slate-600">保存して戻る</button>
         </div>
-        <div class="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
-            
-            <button id="btn-scan-checkin" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-blue-600 rounded-xl active:bg-blue-700 text-sm font-bold shadow-md">
-                <i data-lucide="qr-code" class="w-6 h-6"></i>
-                現場看板QRをスキャン<br><span class="text-xs font-normal text-blue-200">(現場枠データを読込)</span>
-            </button>
 
-            <div class="shrink-0 bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
-                <div class="bg-slate-700 px-3 py-2 text-xs font-bold text-slate-300 flex items-center gap-2">
-                    <i data-lucide="layers" class="w-4 h-4"></i> ポリゴンデータリスト
-                </div>
-                <ul id="polygon-list" class="divide-y divide-slate-700">
-                    <li class="p-3 text-xs text-slate-400 text-center">QRをスキャンしてください</li>
-                </ul>
+        <div class="flex border-b border-slate-800 shrink-0">
+            <button onclick="UI.switchTab('paint')" id="tab-btn-paint" class="flex-1 py-3 text-center font-bold border-b-2 border-blue-500 text-blue-400">ペイント</button>
+            <button onclick="UI.switchTab('counter')" id="tab-btn-counter" class="flex-1 py-3 text-center font-bold border-b-2 border-transparent text-slate-500">カウンター</button>
+        </div>
+
+        <div id="tab-paint" class="p-4 grid grid-cols-2 gap-3 overflow-y-auto pb-8">
+            <button onclick="MAP.setBrush(1, '伐採', '#ef4444')" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
+                <div class="w-8 h-8 rounded-full bg-red-500/80 border border-red-400"></div><span class="font-bold">伐採 (1)</span>
+            </button>
+            <button onclick="MAP.setBrush(2, '集材', '#3b82f6')" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
+                <div class="w-8 h-8 rounded-full bg-blue-500/80 border border-blue-400"></div><span class="font-bold">集材 (2)</span>
+            </button>
+            <button onclick="MAP.setBrush(3, '造材', '#eab308')" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
+                <div class="w-8 h-8 rounded-full bg-yellow-500/80 border border-yellow-400"></div><span class="font-bold">造材 (3)</span>
+            </button>
+            <button onclick="MAP.setBrush(4, '運材', '#a855f7')" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
+                <div class="w-8 h-8 rounded-full bg-purple-500/80 border border-purple-400"></div><span class="font-bold">運材 (4)</span>
+            </button>
+            <button onclick="MAP.setBrush(0, '消しゴム', '#94a3b8')" class="paint-btn col-span-2 bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex justify-center items-center gap-2 active:bg-slate-700">
+                <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                <span class="font-bold">消しゴム</span>
+            </button>
+        </div>
+
+        <div id="tab-counter" class="hidden flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-8">
+            <!-- 動的に生成 -->
+        </div>
+    </div>
+
+    <!-- 6. サイドメニュー (ダッシュボード) -->
+    <div id="side-menu-bg" onclick="UI.toggleSideMenu(false)" class="fixed inset-0 bg-black/50 z-50 hidden backdrop-blur-sm"></div>
+    <div id="side-menu" class="fixed inset-y-0 right-0 w-80 max-w-[85vw] bg-slate-900 border-l border-slate-700 z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
+        <div class="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
+            <h2 class="font-bold text-lg">現場ダッシュボード</h2>
+            <button onclick="UI.toggleSideMenu(false)" class="p-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+            <!-- サマリー (カウンターの数値のみ) -->
+            <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                <h3 class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-wider">アクティブ現場実績</h3>
+                <div id="summary-content" class="text-sm">データがありません</div>
             </div>
 
-            <button id="btn-show-sync" class="shrink-0 flex flex-col items-center gap-2 p-4 bg-emerald-600 rounded-xl active:bg-emerald-700 text-sm font-bold shadow-md">
-                <i data-lucide="refresh-cw" class="w-6 h-6"></i>
-                Sync Hub (データ合体)<br><span class="text-xs font-normal text-emerald-200">(仲間・PCと進捗を同期)</span>
-            </button>
-            
-            <hr class="shrink-0 border-slate-700 my-1">
+            <div class="bg-blue-900/30 rounded-xl p-4 border border-blue-800">
+                <h3 class="text-xs text-blue-400 font-bold mb-3 uppercase tracking-wider flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Sync Hub
+                </h3>
+                <div class="flex flex-col gap-2">
+                    <button onclick="SYNC.openMergeScanner()" class="bg-blue-600 hover:bg-blue-500 p-3 rounded-lg font-bold flex justify-center items-center gap-2">
+                        仲間と同期 (マージ)
+                    </button>
+                    <button onclick="SYNC.showExportQR()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg font-bold flex justify-center items-center gap-2">
+                        PCへ提出 (QR生成)
+                    </button>
+                </div>
+            </div>
 
-            <div class="shrink-0">
-                <label class="text-xs text-slate-400 font-bold mb-2 block flex justify-between items-end">
-                    <span>オフライン地図</span>
-                    <span class="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">GeoTIFF 対応</span>
+            <div>
+                <h3 class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-wider">現場リスト</h3>
+                <div id="site-list" class="flex flex-col gap-2">
+                    <!-- 動的に生成 -->
+                </div>
+                <button onclick="DB.loadDemoSite()" class="mt-3 w-full border border-dashed border-slate-600 text-slate-400 p-3 rounded-lg font-bold hover:bg-slate-800 transition-colors">
+                    + デモ現場をロード
+                </button>
+            </div>
+
+            <!-- オフライン地図設定 UI -->
+            <div class="pt-2 border-t border-slate-700">
+                <h3 class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-wider">オフライン地図</h3>
+                <label class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-sm p-3 rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors text-slate-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    GeoTIFF / 画像をロード
+                    <input type="file" accept=".tif,.tiff,.jpg,.png" class="hidden" onchange="MAP.loadBackground(event)">
                 </label>
-                <input type="file" id="map-upload" accept="image/*,.tif,.tiff" class="hidden">
-                <button onclick="document.getElementById('map-upload').click()" class="w-full flex items-center justify-center gap-2 p-3 bg-slate-800 rounded-xl active:bg-slate-700 text-sm border border-slate-600">
-                    <i data-lucide="image" class="w-4 h-4"></i> 背景画像をロード
-                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. QRモーダル -->
+    <div id="qr-modal" class="fixed inset-0 bg-black/90 z-[60] hidden flex-col">
+        <div class="p-4 flex justify-between items-center bg-slate-900 shrink-0">
+            <h2 id="qr-modal-title" class="font-bold">QRスキャン</h2>
+            <button onclick="QR.close()" class="p-2 bg-slate-800 rounded-full"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        </div>
+        <div class="flex-1 flex flex-col items-center justify-center p-4">
+            
+            <!-- スキャン画面 (カメラ / ファイル読込) -->
+            <div id="qr-reader" class="w-full max-w-sm bg-white rounded-lg overflow-hidden border-2 border-slate-700 text-black flex flex-col">
+                <div class="relative bg-black w-full aspect-square">
+                    <video id="qr-video" class="w-full h-full" autoplay muted playsinline></video>
+                    <div class="qr-frame"></div>
+                </div>
+                <div class="p-3 space-y-2 text-xs text-slate-700">
+                    <p class="font-bold">カメラQRスキャン</p>
+                    <p>QRコードを枠内にゆっくり近づけてください。うまく起動しない場合はブラウザのカメラ権限とHTTPS接続をご確認ください。</p>
+                    <label class="mt-1 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 cursor-pointer font-bold text-xs">
+                        画像ファイルから読み取る
+                        <input id="qr-file-input" type="file" accept="image/*" class="hidden" onchange="QR.scanImageFile(event)">
+                    </label>
+                </div>
+                <canvas id="qr-canvas" class="hidden"></canvas>
             </div>
             
-            <div class="shrink-0 mt-auto bg-slate-800 p-4 rounded-xl border border-slate-700">
-                <div class="text-xs text-slate-400 mb-2 font-bold">現在のローカル実績</div>
-                <div class="grid grid-cols-2 gap-2 text-sm">
-                    <div>伐採: <span id="menu-felling" class="font-bold text-yellow-400">0</span></div>
-                    <div>集材: <span id="menu-yarding" class="font-bold text-orange-400">0</span></div>
-                    <div>造材: <span id="menu-bucking" class="font-bold text-sky-400">0</span></div>
-                    <div>搬出: <span id="menu-forwarding" class="font-bold text-green-400">0</span></div>
+            <!-- 生成・表示画面 -->
+            <div id="qr-display" class="hidden bg-white p-6 rounded-xl w-full max-w-sm flex flex-col items-center justify-center">
+                <!-- 実際のQRコードが描画されるコンテナ -->
+                <div id="qr-canvas-container" class="flex justify-center items-center bg-white p-2 rounded-lg"></div>
+                <p class="mt-4 text-sm text-slate-600 font-bold">PCのカメラで読み取ってください</p>
+                <!-- バックアップ用テキスト -->
+                <div class="mt-2 w-full h-16 overflow-y-auto bg-slate-100 p-2 rounded cursor-text" style="user-select: text; -webkit-user-select: text;">
+                    <p class="font-mono text-[10px] break-all text-slate-800" id="qr-export-text"></p>
                 </div>
+                <button onclick="SYNC.copyExportQR()" class="mt-2 w-full bg-blue-100 text-blue-700 py-3 rounded-lg text-sm font-bold active:bg-blue-200 transition-colors">
+                    クリップボードにコピー
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- Record Bottom Sheet -->
-    <div id="record-sheet" class="absolute bottom-0 w-full bg-slate-100 rounded-t-3xl shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.3)] drawer-closed transition-transform duration-300 z-30 flex flex-col border-t border-slate-200" style="max-height: 40dvh;">
-        <div class="flex flex-col bg-white rounded-t-3xl border-b border-slate-200 shrink-0">
-            <div class="flex justify-between items-center p-2 px-4">
-                <div class="flex items-center gap-2 text-yellow-600 font-bold text-sm">
-                    <i data-lucide="edit-3" class="w-4 h-4"></i> 記録モード
-                    <span class="text-[10px] text-slate-400 font-normal ml-1 bg-slate-100 px-1.5 py-0.5 rounded">2本指で移動・ズーム</span>
-                </div>
-                <button id="btn-close-record" class="px-4 py-1.5 bg-slate-800 text-white font-bold rounded-full shadow-md active:bg-slate-700 text-xs flex items-center gap-1">
-                    保存して戻る <i data-lucide="check" class="w-3 h-3"></i>
-                </button>
-            </div>
-            <div class="flex text-sm font-bold">
-                <button id="tab-paint" class="flex-1 py-2.5 text-yellow-600 border-b-2 border-yellow-500 bg-yellow-50 flex justify-center items-center gap-2 transition-colors">
-                    <i data-lucide="brush" class="w-4 h-4"></i> エリアを塗る
-                </button>
-                <button id="tab-counter" class="flex-1 py-2.5 text-slate-500 border-b-2 border-transparent hover:bg-slate-50 flex justify-center items-center gap-2 transition-colors">
-                    <i data-lucide="calculator" class="w-4 h-4"></i> カウンター
-                </button>
-            </div>
-        </div>
-
-        <div class="p-3 overflow-y-auto flex-1">
-            <!-- Paint Tab -->
-            <div id="content-paint" class="flex flex-col gap-2 h-full justify-center">
-                <div class="flex overflow-x-auto gap-3 py-1 no-scrollbar snap-x">
-                    <button id="btn-brush-1" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-yellow-400 text-yellow-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
-                        <i data-lucide="axe" class="w-5 h-5"></i><span class="text-[10px] mt-1">伐採済</span>
-                    </button>
-                    <button id="btn-brush-2" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-orange-400 text-orange-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
-                        <i data-lucide="tractor" class="w-5 h-5"></i><span class="text-[10px] mt-1">集材済</span>
-                    </button>
-                    <button id="btn-brush-3" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-sky-400 text-sky-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
-                        <i data-lucide="hammer" class="w-5 h-5"></i><span class="text-[10px] mt-1">造材済</span>
-                    </button>
-                    <button id="btn-brush-4" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-green-400 text-green-900 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
-                        <i data-lucide="truck" class="w-5 h-5"></i><span class="text-[10px] mt-1">搬出済</span>
-                    </button>
-                    <button id="btn-brush-0" class="brush-btn snap-center shrink-0 w-20 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl border-4 border-transparent flex flex-col items-center shadow-md">
-                        <i data-lucide="eraser" class="w-5 h-5"></i><span class="text-[10px] mt-1">消しゴム</span>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Counter Tab -->
-            <div id="content-counter" class="hidden grid-cols-2 gap-2">
-                <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="text-center py-1 bg-yellow-50 text-[10px] font-bold text-yellow-700 border-b border-slate-100">伐採 (単位: 10本)</div>
-                    <div class="flex items-center justify-between p-1">
-                        <button class="btn-counter-dec w-10 h-10 flex justify-center items-center text-slate-400 active:bg-slate-100 rounded-lg" data-target="felling" data-amount="10"><i data-lucide="minus"></i></button>
-                        <span id="sheet-count-felling" class="text-lg font-bold text-slate-800">0</span>
-                        <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-yellow-600 bg-yellow-50 active:bg-yellow-100 rounded-lg" data-target="felling" data-amount="10"><i data-lucide="plus"></i></button>
-                    </div>
-                </div>
-                <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="text-center py-1 bg-orange-50 text-[10px] font-bold text-orange-700 border-b border-slate-100">集材 (単位: 10本)</div>
-                    <div class="flex items-center justify-between p-1">
-                        <button class="btn-counter-dec w-10 h-10 flex justify-center items-center text-slate-400 active:bg-slate-100 rounded-lg" data-target="yarding" data-amount="10"><i data-lucide="minus"></i></button>
-                        <span id="sheet-count-yarding" class="text-lg font-bold text-slate-800">0</span>
-                        <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-orange-600 bg-orange-50 active:bg-orange-100 rounded-lg" data-target="yarding" data-amount="10"><i data-lucide="plus"></i></button>
-                    </div>
-                </div>
-                <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="text-center py-1 bg-sky-50 text-[10px] font-bold text-sky-700 border-b border-slate-100">造材 (単位: 10本)</div>
-                    <div class="flex items-center justify-between p-1">
-                        <button class="btn-counter-dec w-10 h-10 flex justify-center items-center text-slate-400 active:bg-slate-100 rounded-lg" data-target="bucking" data-amount="10"><i data-lucide="minus"></i></button>
-                        <span id="sheet-count-bucking" class="text-lg font-bold text-slate-800">0</span>
-                        <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-sky-600 bg-sky-50 active:bg-sky-100 rounded-lg" data-target="bucking" data-amount="10"><i data-lucide="plus"></i></button>
-                    </div>
-                </div>
-                <div class="flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="text-center py-1 bg-green-50 text-[10px] font-bold text-green-700 border-b border-slate-100">搬出 (単位: 1台)</div>
-                    <div class="flex items-center justify-between p-1">
-                        <button class="btn-counter-dec w-10 h-10 flex justify-center items-center text-slate-400 active:bg-slate-100 rounded-lg" data-target="forwarding" data-amount="1"><i data-lucide="minus"></i></button>
-                        <span id="sheet-count-forwarding" class="text-lg font-bold text-slate-800">0</span>
-                        <button class="btn-counter-inc w-10 h-10 flex justify-center items-center text-green-600 bg-green-50 active:bg-green-100 rounded-lg" data-target="forwarding" data-amount="1"><i data-lucide="plus"></i></button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Sync Modal -->
-    <div id="sync-modal" class="hidden fixed inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
-            <div class="bg-emerald-600 p-4 flex justify-between items-center text-white">
-                <h2 class="font-bold flex items-center gap-2"><i data-lucide="refresh-cw"></i> Sync Hub</h2>
-                <button id="btn-close-sync-modal" class="p-1"><i data-lucide="x"></i></button>
-            </div>
-            <div class="p-5 flex flex-col items-center gap-4">
-                <div class="text-xs text-slate-500 font-bold text-center">事務所のPCや仲間の端末で<br>このQRコードをスキャンしてください</div>
-                <div id="qrcode-container" class="bg-white p-3 border-2 border-slate-100 rounded-xl"></div>
-                
-                <button id="btn-scan-partner" class="w-full py-4 bg-slate-800 text-white rounded-xl font-bold shadow active:bg-slate-700 mt-2 flex justify-center items-center gap-2">
-                    <i data-lucide="camera" class="w-5 h-5"></i> 仲間のQRをカメラで読込
-                </button>
-                
-                <div class="w-full mt-2 bg-slate-50 p-2 rounded-lg border border-slate-200 flex gap-2">
-                    <input type="text" id="payload-copy-text" class="flex-1 p-1 text-[10px] font-mono bg-white border border-slate-200 rounded outline-none" readonly>
-                    <button id="btn-copy-payload" class="px-2 bg-blue-50 text-blue-700 rounded text-xs"><i data-lucide="copy" class="w-3 h-3"></i></button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- カメラ起動用モーダル (QRリーダー) -->
-    <div id="qr-reader-modal" class="hidden fixed inset-0 bg-black/95 z-[60] flex flex-col items-center justify-center p-4">
-        <div class="text-white font-bold mb-4 flex items-center gap-2"><i data-lucide="scan-line" class="w-6 h-6"></i> QRコードをスキャン</div>
-        <div class="w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-2xl relative">
-            <div id="qr-reader" class="w-full"></div>
-        </div>
-        <button id="btn-close-qr-reader" class="mt-8 px-8 py-3 bg-white/20 text-white font-bold rounded-full border border-white/40 active:bg-white/30 backdrop-blur-sm">
-            キャンセル
-        </button>
-    </div>
-
+    <!-- --- JavaScript ロジック --- -->
     <script>
-        lucide.createIcons();
-
-        // --- Data & State ---
-        const LOGICAL_MAP_SIZE = 1000;
-        const GRID_SIZE = 40;
-        const CELL_SIZE = LOGICAL_MAP_SIZE / GRID_SIZE;
-        let gridData = new Uint8Array(GRID_SIZE * GRID_SIZE);
-        
-        let counters = { felling: 0, yarding: 0, bucking: 0, forwarding: 0 };
-        let currentBrush = 1; 
-        let isRecordMode = false;
-
-        let viewScale = 1;
-        let viewOffsetX = 0;
-        let viewOffsetY = 0;
-
-        let bgMapImage = null;
-        let gpsPosition = null;
-        let gpsWatchId = null;
-        
-        let sitePolygons = [];
-        let selectedPolygonId = null;
-
-        const STATE_COLORS = {
-            1: 'rgba(250, 204, 21, 0.7)', 2: 'rgba(249, 115, 22, 0.7)', 
-            3: 'rgba(56, 189, 248, 0.7)', 4: 'rgba(74, 222, 128, 0.8)'
+        const STATE = {
+            activeSiteId: null,
+            currentSite: null, 
+            mode: 'view', 
+            brush: { val: 1, name: '伐採', color: '#ef4444' }, 
+            bgImage: null, 
+            countersConf: [
+                { idx: 0, name: '伐採', step: 1, unit: '本' },
+                { idx: 1, name: '集材', step: 1, unit: '本' },
+                { idx: 2, name: '造材', step: 1, unit: '本' },
+                { idx: 3, name: '運材', step: 1, unit: '台' }
+            ]
         };
 
-        const canvas = document.getElementById('mapCanvas');
-        const ctx = canvas.getContext('2d');
-        const container = document.getElementById('map-container');
-
-        // --- Core Functions ---
-        function compressMapData() {
-            let rle = ""; let count = 1; let prev = gridData[0];
-            const stateMap = {0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E'};
-            for (let i = 1; i < gridData.length; i++) {
-                if (gridData[i] === prev) count++;
-                else { rle += count + stateMap[prev]; prev = gridData[i]; count = 1; }
+        // IndexedDB 管理
+        const DB = {
+            db: null,
+            init: () => {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open('ForestryScoutDB', 1);
+                    req.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains('workSites')) {
+                            db.createObjectStore('workSites', { keyPath: 'siteId' });
+                        }
+                    };
+                    req.onsuccess = (e) => {
+                        DB.db = e.target.result;
+                        resolve();
+                    };
+                    req.onerror = (e) => reject(e);
+                });
+            },
+            saveSite: (siteData) => {
+                const tx = DB.db.transaction('workSites', 'readwrite');
+                siteData.lastUpdated = Date.now();
+                tx.objectStore('workSites').put(siteData);
+                return tx.complete;
+            },
+            getSite: (siteId) => {
+                return new Promise((resolve) => {
+                    const tx = DB.db.transaction('workSites', 'readonly');
+                    const req = tx.objectStore('workSites').get(siteId);
+                    req.onsuccess = () => resolve(req.result);
+                });
+            },
+            getAllSites: () => {
+                return new Promise((resolve) => {
+                    const tx = DB.db.transaction('workSites', 'readonly');
+                    const req = tx.objectStore('workSites').getAll();
+                    req.onsuccess = () => resolve(req.result);
+                });
+            },
+            loadDemoSite: async () => {
+                const demoId = 'demo-' + Date.now();
+                const lat = 35.0, lon = 138.0;
+                const d = 0.002;
+                const newSite = {
+                    siteId: demoId,
+                    name: '林小班 デモエリア',
+                    polygon: [[lon, lat], [lon+d, lat], [lon+d, lat+d], [lon, lat+d]],
+                    bbox: [lon, lat, lon+d, lat+d], 
+                    paintData: Array(1600).fill(0), 
+                    counters: [0, 0, 0, 0]
+                };
+                await DB.saveSite(newSite);
+                await App.loadSite(demoId);
+                UI.toggleSideMenu(false);
             }
-            rle += count + stateMap[prev];
-            return btoa(rle);
-        }
+        };
 
-        function decompressMapData(base64Str) {
-            const rle = atob(base64Str); const result = new Uint8Array(GRID_SIZE * GRID_SIZE);
-            let idx = 0; const regex = /(\d+)([ABCDE])/g; let match;
-            const revMap = {'A': 0, 'B': 1, 'C': 2, 'D': 3, 'E': 4};
-            while ((match = regex.exec(rle)) !== null) {
-                let count = parseInt(match[1], 10); let val = revMap[match[2]];
-                for (let i = 0; i < count; i++) { if (idx < result.length) result[idx++] = val; }
-            }
-            return result;
-        }
-
-        // --- Rendering ---
-        function resizeCanvas() {
-            canvas.width = container.clientWidth; canvas.height = container.clientHeight;
-            resetView();
-        }
-
-        function resetView() {
-            const minDim = Math.min(canvas.width, canvas.height) * 0.9;
-            viewScale = minDim / LOGICAL_MAP_SIZE;
-            viewOffsetX = (canvas.width - LOGICAL_MAP_SIZE * viewScale) / 2;
-            viewOffsetY = (canvas.height - LOGICAL_MAP_SIZE * viewScale) / 2;
-            renderCanvas();
-        }
-
-        window.addEventListener('resize', resizeCanvas);
-        document.getElementById('btn-reset-view').addEventListener('click', resetView);
-
-        function renderCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.save();
-            ctx.translate(viewOffsetX, viewOffsetY);
-            ctx.scale(viewScale, viewScale);
-
-            if (bgMapImage) {
-                ctx.drawImage(bgMapImage, 0, 0, LOGICAL_MAP_SIZE, LOGICAL_MAP_SIZE);
-            }
-
-            sitePolygons.forEach(poly => {
-                if(poly.points.length === 0) return;
-                ctx.beginPath();
-                ctx.moveTo(poly.points[0].x * LOGICAL_MAP_SIZE, poly.points[0].y * LOGICAL_MAP_SIZE);
-                for(let i=1; i<poly.points.length; i++) {
-                    ctx.lineTo(poly.points[i].x * LOGICAL_MAP_SIZE, poly.points[i].y * LOGICAL_MAP_SIZE);
-                }
-                ctx.closePath();
-                
-                if (poly.id === selectedPolygonId) {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; ctx.fill();
-                    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 4 / viewScale; ctx.stroke();
-                } else {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; ctx.fill();
-                    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2 / viewScale;
-                    ctx.setLineDash([10 / viewScale, 5 / viewScale]); ctx.stroke(); ctx.setLineDash([]);
-                }
-            });
-
-            for (let y = 0; y < GRID_SIZE; y++) {
-                for (let x = 0; x < GRID_SIZE; x++) {
-                    let val = gridData[y * GRID_SIZE + x];
-                    if (val > 0) {
-                        ctx.fillStyle = STATE_COLORS[val];
-                        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE + 0.5, CELL_SIZE + 0.5); 
+        // RLE圧縮エンジン（PC版と共通仕様：RLE文字列(A〜E)をBase64化）
+        const RLE = {
+            // arr: 長さ1600の数値配列(0〜4)
+            encode: (arr) => {
+                const map = ['A', 'B', 'C', 'D', 'E']; // 0〜4 を A〜E にマップ
+                let rle = '';
+                let count = 1;
+                for (let i = 1; i <= arr.length; i++) {
+                    if (arr[i] === arr[i - 1]) {
+                        count++;
+                    } else {
+                        const v = arr[i - 1] || 0;
+                        const letter = map[v] || 'A';
+                        rle += `${count}${letter}`;
+                        count = 1;
                     }
                 }
-            }
-
-            if (isRecordMode) {
-                ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)'; ctx.lineWidth = 1 / viewScale; ctx.beginPath();
-                for (let i = 0; i <= GRID_SIZE; i++) {
-                    ctx.moveTo(i * CELL_SIZE, 0); ctx.lineTo(i * CELL_SIZE, LOGICAL_MAP_SIZE);
-                    ctx.moveTo(0, i * CELL_SIZE); ctx.lineTo(LOGICAL_MAP_SIZE, i * CELL_SIZE);
-                }
-                ctx.stroke();
-            }
-
-            if (gpsPosition) {
-                const gx = gpsPosition.x * LOGICAL_MAP_SIZE; const gy = gpsPosition.y * LOGICAL_MAP_SIZE;
-                ctx.beginPath(); ctx.arc(gx, gy, 14 / viewScale, 0, Math.PI * 2); ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; ctx.fill();
-                ctx.beginPath(); ctx.arc(gx, gy, 6 / viewScale, 0, Math.PI * 2); ctx.fillStyle = '#3b82f6'; ctx.fill();
-                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 / viewScale; ctx.stroke();
-            }
-            ctx.restore();
-        }
-
-        // --- Touch / Draw Logic ---
-        function getLogicalCoords(clientX, clientY) {
-            const rect = canvas.getBoundingClientRect();
-            const canvasX = clientX - rect.left; const canvasY = clientY - rect.top;
-            return { x: (canvasX - viewOffsetX) / viewScale, y: (canvasY - viewOffsetY) / viewScale };
-        }
-
-        function getGridCoordsFromLogical(lx, ly) {
-            const gx = Math.floor(lx / CELL_SIZE); const gy = Math.floor(ly / CELL_SIZE);
-            return { gx, gy, valid: (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) };
-        }
-
-        function isPointInPolygon(point, polyPoints) {
-            const px = point.x / LOGICAL_MAP_SIZE; const py = point.y / LOGICAL_MAP_SIZE; let inside = false;
-            for (let i = 0, j = polyPoints.length - 1; i < polyPoints.length; j = i++) {
-                let xi = polyPoints[i].x, yi = polyPoints[i].y; let xj = polyPoints[j].x, yj = polyPoints[j].y;
-                let intersect = ((yi > py) != (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
-                if (intersect) inside = !inside;
-            }
-            return inside;
-        }
-
-        let touchState = { mode: 'none', startX: 0, startY: 0, lastX: 0, lastY: 0, startDist: 0, startScale: 1, moved: false };
-
-        function applyBrush(gx, gy) {
-            if (!isRecordMode) return;
-            const idx = gy * GRID_SIZE + gx;
-            if (currentBrush === 0) gridData[idx] = 0; else gridData[idx] = Math.max(gridData[idx], currentBrush);
-        }
-
-        function drawPaintLine(lx0, ly0, lx1, ly1) {
-            const start = getGridCoordsFromLogical(lx0, ly0); const end = getGridCoordsFromLogical(lx1, ly1);
-            if (!start.valid && !end.valid) return;
-            let x0 = start.gx, y0 = start.gy, x1 = end.gx, y1 = end.gy;
-            let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-            let sx = (x0 < x1) ? 1 : -1, sy = (y0 < y1) ? 1 : -1; let err = dx - dy;
-            while (true) {
-                if (x0 >= 0 && x0 < GRID_SIZE && y0 >= 0 && y0 < GRID_SIZE) applyBrush(x0, y0);
-                if (x0 === x1 && y0 === y1) break;
-                let e2 = 2 * err; if (e2 > -dy) { err -= dy; x0 += sx; } if (e2 < dx) { err += dx; y0 += sy; }
-            }
-        }
-
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (e.touches.length === 1) {
-                touchState.startX = e.touches[0].clientX; touchState.startY = e.touches[0].clientY;
-                touchState.lastX = touchState.startX; touchState.lastY = touchState.startY; touchState.moved = false;
-                if (isRecordMode) {
-                    touchState.mode = 'paint'; const lc = getLogicalCoords(touchState.startX, touchState.startY);
-                    const gc = getGridCoordsFromLogical(lc.x, lc.y); if (gc.valid) { applyBrush(gc.gx, gc.gy); renderCanvas(); }
-                } else touchState.mode = 'pan';
-            } else if (e.touches.length === 2) {
-                touchState.mode = 'pinch';
-                let dx = e.touches[0].clientX - e.touches[1].clientX; let dy = e.touches[0].clientY - e.touches[1].clientY;
-                touchState.startDist = Math.hypot(dx, dy); touchState.startScale = viewScale;
-                touchState.lastX = (e.touches[0].clientX + e.touches[1].clientX) / 2; touchState.lastY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-            }
-        }, { passive: false });
-
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault(); if (touchState.mode === 'none') return;
-            touchState.moved = true;
-            if (touchState.mode === 'paint' && e.touches.length === 1) {
-                const currentX = e.touches[0].clientX, currentY = e.touches[0].clientY;
-                drawPaintLine(getLogicalCoords(touchState.lastX, touchState.lastY).x, getLogicalCoords(touchState.lastX, touchState.lastY).y, getLogicalCoords(currentX, currentY).x, getLogicalCoords(currentX, currentY).y);
-                touchState.lastX = currentX; touchState.lastY = currentY; renderCanvas();
-            } else if (touchState.mode === 'pan' && e.touches.length === 1) {
-                const currentX = e.touches[0].clientX, currentY = e.touches[0].clientY;
-                viewOffsetX += (currentX - touchState.lastX); viewOffsetY += (currentY - touchState.lastY);
-                touchState.lastX = currentX; touchState.lastY = currentY; renderCanvas();
-            } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
-                let currentDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                let cx = (e.touches[0].clientX + e.touches[1].clientX) / 2, cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                let newScale = Math.max(0.1, Math.min(touchState.startScale * (currentDist / touchState.startDist), 10));
-                let scaleRatio = newScale / viewScale;
-                viewOffsetX = cx - (cx - viewOffsetX) * scaleRatio; viewOffsetY = cy - (cy - viewOffsetY) * scaleRatio;
-                viewScale = newScale; viewOffsetX += (cx - touchState.lastX); viewOffsetY += (cy - touchState.lastY);
-                touchState.lastX = cx; touchState.lastY = cy; renderCanvas();
-            }
-        }, { passive: false });
-
-        canvas.addEventListener('touchend', (e) => {
-            if (!isRecordMode && touchState.mode === 'pan' && !touchState.moved) {
-                const lc = getLogicalCoords(touchState.startX, touchState.startY); let hitId = null;
-                for (let i = sitePolygons.length - 1; i >= 0; i--) {
-                    if (isPointInPolygon(lc, sitePolygons[i].points)) { hitId = sitePolygons[i].id; break; }
-                }
-                if (hitId) selectPolygon(hitId); else { document.getElementById('property-card').classList.add('hidden'); selectedPolygonId = null; renderCanvas(); }
-            }
-            if (e.touches.length === 0) touchState.mode = 'none';
-        });
-
-        // --- GeoTIFF / Image File Loading ---
-        document.getElementById('map-upload').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const ext = file.name.split('.').pop().toLowerCase();
-            
-            if (ext === 'tif' || ext === 'tiff') {
+                // ブラウザ環境前提なので btoa を利用
                 try {
-                    const tiff = await GeoTIFF.fromBlob(file);
-                    const image = await tiff.getImage();
-                    const width = image.getWidth();
-                    const height = image.getHeight();
-                    const rasters = await image.readRasters();
-                    
-                    const offCanvas = document.createElement('canvas');
-                    offCanvas.width = width; offCanvas.height = height;
-                    const offCtx = offCanvas.getContext('2d');
-                    const imgData = offCtx.createImageData(width, height);
-                    
-                    for (let i = 0; i < width * height; i++) {
-                        const r = rasters[0][i];
-                        const g = rasters.length >= 3 ? rasters[1][i] : r;
-                        const b = rasters.length >= 3 ? rasters[2][i] : r;
-                        const a = rasters.length >= 4 ? rasters[3][i] : 255;
-                        imgData.data[i*4]=r; imgData.data[i*4+1]=g; imgData.data[i*4+2]=b; imgData.data[i*4+3]=a;
+                    return btoa(rle);
+                } catch (e) {
+                    // 何らかの理由でBase64化に失敗した場合は素の文字列を返す（後段のデコーダで両対応）
+                    return rle;
+                }
+            },
+            decode: (str) => {
+                const res = Array(1600).fill(0);
+                if (!str) return res;
+
+                // まず PC版仕様(Base64化されたRLE A〜E)として解釈を試みる
+                try {
+                    const rle = atob(str);
+                    const revMap = { A: 0, B: 1, C: 2, D: 3, E: 4 };
+                    let ptr = 0;
+                    const regex = /(\d+)([ABCDE])/g;
+                    let match;
+                    while ((match = regex.exec(rle)) !== null) {
+                        const count = parseInt(match[1], 10);
+                        const val = revMap[match[2]] ?? 0;
+                        for (let i = 0; i < count && ptr < 1600; i++) {
+                            res[ptr++] = val;
+                        }
                     }
-                    offCtx.putImageData(imgData, 0, 0);
+                    return res;
+                } catch (e) {
+                    // Base64として解釈できなかった場合は、旧フォーマット(例: "30,21")として扱う
+                    let ptr = 0;
+                    str.split(',').forEach(part => {
+                        const match = part.match(/(\d+)(\d)/);
+                        if (match) {
+                            const count = parseInt(match[1], 10);
+                            const val = parseInt(match[2], 10);
+                            for (let i = 0; i < count && ptr < 1600; i++) {
+                                res[ptr++] = val;
+                            }
+                        }
+                    });
+                    return res;
+                }
+            }
+        };
+
+        // UI コントローラー
+        const UI = {
+            init: () => {
+                UI.renderCounters();
+                UI.updateHeader();
+            },
+            updateHeader: () => {
+                const el = document.getElementById('header-site-name');
+                if (STATE.currentSite) {
+                    el.innerText = `📍 ${STATE.currentSite.name}`;
+                    el.classList.remove('text-slate-400');
+                } else {
+                    el.innerText = `⚠ 現場看板QRをスキャンしてください`;
+                    el.classList.add('text-slate-400');
+                }
+            },
+            toggleSideMenu: async (show) => {
+                const menu = document.getElementById('side-menu');
+                const bg = document.getElementById('side-menu-bg');
+                if (show) {
+                    await UI.renderSideMenu();
+                    menu.classList.remove('translate-x-full');
+                    bg.classList.remove('hidden');
+                } else {
+                    menu.classList.add('translate-x-full');
+                    bg.classList.add('hidden');
+                }
+            },
+            openBottomSheet: () => {
+                STATE.mode = 'paint';
+                document.getElementById('bottom-sheet').classList.remove('translate-y-full', 'sheet-collapsed');
+                document.getElementById('btn-open-record').classList.add('translate-y-24');
+                document.getElementById('app-header').classList.add('-translate-y-full');
+                UI.updateToolLabel();
+            },
+            closeBottomSheet: (e) => {
+                if(e) e.stopPropagation();
+                STATE.mode = 'view';
+                document.getElementById('bottom-sheet').classList.add('translate-y-full');
+                document.getElementById('bottom-sheet').classList.remove('sheet-collapsed');
+                document.getElementById('btn-open-record').classList.remove('translate-y-24');
+                document.getElementById('app-header').classList.remove('-translate-y-full');
+                if(STATE.currentSite) DB.saveSite(STATE.currentSite); 
+                UI.renderSideMenu(); 
+            },
+            expandBottomSheet: () => {
+                document.getElementById('bottom-sheet').classList.remove('sheet-collapsed');
+            },
+            collapseToToolbar: () => {
+                if (!document.getElementById('tab-paint').classList.contains('hidden')) {
+                    document.getElementById('bottom-sheet').classList.add('sheet-collapsed');
+                }
+            },
+            switchTab: (tab) => {
+                document.getElementById('tab-paint').classList.toggle('hidden', tab !== 'paint');
+                document.getElementById('tab-counter').classList.toggle('hidden', tab !== 'counter');
+                document.getElementById('tab-btn-paint').className = tab === 'paint' ? 'flex-1 py-3 text-center font-bold border-b-2 border-blue-500 text-blue-400' : 'flex-1 py-3 text-center font-bold border-b-2 border-transparent text-slate-500';
+                document.getElementById('tab-btn-counter').className = tab === 'counter' ? 'flex-1 py-3 text-center font-bold border-b-2 border-blue-500 text-blue-400' : 'flex-1 py-3 text-center font-bold border-b-2 border-transparent text-slate-500';
+                
+                if(tab === 'counter') document.getElementById('bottom-sheet').classList.remove('sheet-collapsed');
+            },
+            updateToolLabel: () => {
+                document.getElementById('current-tool-label').innerText = `${STATE.brush.name} モード`;
+            },
+            renderCounters: () => {
+                const container = document.getElementById('tab-counter');
+                container.innerHTML = '';
+                STATE.countersConf.forEach(conf => {
+                    const val = STATE.currentSite ? STATE.currentSite.counters[conf.idx] : 0;
+                    const html = `
+                        <div class="bg-slate-800 rounded-2xl p-4 flex items-center justify-between border border-slate-700 shadow-sm">
+                            <span class="font-bold text-lg w-16">${conf.name}</span>
+                            <div class="flex items-center gap-4">
+                                <button onpointerdown="CounterCtrl.start(${conf.idx}, -${conf.step})" onpointerup="CounterCtrl.stop()" onpointerleave="CounterCtrl.stop()" class="w-14 h-14 bg-slate-700 rounded-xl flex items-center justify-center text-2xl active:bg-slate-600 shadow-inner">-</button>
+                                <div class="w-20 text-center flex flex-col items-center">
+                                    <span id="counter-val-${conf.idx}" class="text-3xl font-mono font-bold">${val}</span>
+                                    <span class="text-xs text-slate-400">${conf.unit}</span>
+                                </div>
+                                <button onpointerdown="CounterCtrl.start(${conf.idx}, ${conf.step})" onpointerup="CounterCtrl.stop()" onpointerleave="CounterCtrl.stop()" class="w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center text-2xl font-bold active:bg-blue-500 shadow-lg">+</button>
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML += html;
+                });
+            },
+            renderSideMenu: async () => {
+                const summaryEl = document.getElementById('summary-content');
+                if (STATE.currentSite) {
+                    const c = STATE.currentSite.counters;
+                    summaryEl.innerHTML = `
+                        <div class="grid grid-cols-2 gap-3 text-slate-300">
+                            <div class="bg-slate-700/40 p-3 rounded-lg flex flex-col items-center">
+                                <span class="text-xs text-slate-400">🌲伐採</span>
+                                <div><span class="font-bold text-xl text-white">${c[0]}</span> <span class="text-xs">本</span></div>
+                            </div>
+                            <div class="bg-slate-700/40 p-3 rounded-lg flex flex-col items-center">
+                                <span class="text-xs text-slate-400">🚜集材</span>
+                                <div><span class="font-bold text-xl text-white">${c[1]}</span> <span class="text-xs">本</span></div>
+                            </div>
+                            <div class="bg-slate-700/40 p-3 rounded-lg flex flex-col items-center">
+                                <span class="text-xs text-slate-400">🪚造材</span>
+                                <div><span class="font-bold text-xl text-white">${c[2]}</span> <span class="text-xs">本</span></div>
+                            </div>
+                            <div class="bg-slate-700/40 p-3 rounded-lg flex flex-col items-center">
+                                <span class="text-xs text-slate-400">🚚運材</span>
+                                <div><span class="font-bold text-xl text-white">${c[3]}</span> <span class="text-xs">台</span></div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    summaryEl.innerText = '現場が選択されていません';
+                }
+
+                const sites = await DB.getAllSites();
+                const listEl = document.getElementById('site-list');
+                listEl.innerHTML = '';
+                sites.sort((a,b) => b.lastUpdated - a.lastUpdated).forEach(s => {
+                    const isActive = s.siteId === STATE.activeSiteId;
+                    const dateStr = new Date(s.lastUpdated).toLocaleDateString('ja-JP', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+                    listEl.innerHTML += `
+                        <div onclick="App.loadSite('${s.siteId}')" class="p-3 rounded-lg border cursor-pointer transition-colors ${isActive ? 'bg-blue-900/50 border-blue-500' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'}">
+                            <div class="font-bold flex items-center justify-between">
+                                <span class="truncate">${s.name}</span>
+                                ${isActive ? '<span class="flex w-2 h-2 shrink-0 rounded-full bg-blue-500 ml-2"></span>' : ''}
+                            </div>
+                            <div class="text-xs text-slate-500 mt-1">最終更新: ${dateStr}</div>
+                        </div>
+                    `;
+                });
+            }
+        };
+
+        const CounterCtrl = {
+            timer: null,
+            interval: null,
+            start: (idx, delta) => {
+                CounterCtrl.update(idx, delta);
+                CounterCtrl.timer = setTimeout(() => {
+                    CounterCtrl.interval = setInterval(() => CounterCtrl.update(idx, delta), 150);
+                }, 400); 
+            },
+            stop: () => {
+                clearTimeout(CounterCtrl.timer);
+                clearInterval(CounterCtrl.interval);
+                if(STATE.currentSite) DB.saveSite(STATE.currentSite); 
+            },
+            update: (idx, delta) => {
+                if (!STATE.currentSite) return;
+                let val = STATE.currentSite.counters[idx] + delta;
+                if (val < 0) val = 0;
+                STATE.currentSite.counters[idx] = val;
+                
+                const el = document.getElementById(`counter-val-${idx}`);
+                if(el) {
+                    el.innerText = val;
+                    el.classList.remove('pop-anim');
+                    void el.offsetWidth; 
+                    el.classList.add('pop-anim');
+                }
+                
+                if (navigator.vibrate) navigator.vibrate(15);
+            }
+        };
+
+        const MAP = {
+            canvas: null,
+            ctx: null,
+            transform: { x: 0, y: 0, scale: 1 },
+            isDrawing: false,
+            
+            lastTouch: null,
+            initialPinchDist: null,
+            initialScale: 1,
+
+            init: () => {
+                MAP.canvas = document.getElementById('mapCanvas');
+                MAP.ctx = MAP.canvas.getContext('2d');
+                MAP.resize();
+                window.addEventListener('resize', MAP.resize);
+                MAP.setupTouch();
+                MAP.loop();
+            },
+            resize: () => {
+                MAP.canvas.width = window.innerWidth;
+                MAP.canvas.height = window.innerHeight;
+            },
+            setBrush: (val, name, color) => {
+                STATE.brush = { val, name, color };
+                UI.updateToolLabel();
+                UI.collapseToToolbar(); 
+                
+                document.querySelectorAll('.paint-btn').forEach(b => b.classList.remove('border-blue-500', 'bg-blue-900/30'));
+                event.currentTarget.classList.add('border-blue-500', 'bg-blue-900/30');
+            },
+            
+            lon2x: (lon) => {
+                if(!STATE.currentSite) return 0;
+                const [w, s, e, n] = STATE.currentSite.bbox;
+                return ((lon - w) / (e - w)) * 800;
+            },
+            lat2y: (lat) => {
+                if(!STATE.currentSite) return 0;
+                const [w, s, e, n] = STATE.currentSite.bbox;
+                return ((n - lat) / (n - s)) * 800; 
+            },
+
+            setupTouch: () => {
+                const getDistance = (touches) => {
+                    const dx = touches[0].clientX - touches[1].clientX;
+                    const dy = touches[0].clientY - touches[1].clientY;
+                    return Math.sqrt(dx * dx + dy * dy);
+                };
+                
+                const getCenter = (touches) => {
+                    return {
+                        x: (touches[0].clientX + touches[1].clientX) / 2,
+                        y: (touches[0].clientY + touches[1].clientY) / 2
+                    };
+                };
+
+                MAP.canvas.addEventListener('pointerdown', (e) => {
+                    if (e.pointerType !== 'mouse') return; 
+                    if (STATE.mode === 'paint') {
+                        MAP.isDrawing = true;
+                        MAP.paintCell(e.clientX, e.clientY);
+                    } else {
+                        MAP.lastTouch = { x: e.clientX, y: e.clientY };
+                    }
+                });
+                MAP.canvas.addEventListener('pointermove', (e) => {
+                    if (e.pointerType !== 'mouse') return;
+                    if (STATE.mode === 'paint' && MAP.isDrawing) {
+                        MAP.paintCell(e.clientX, e.clientY);
+                    } else if (STATE.mode === 'view' && MAP.lastTouch) {
+                        MAP.transform.x += e.clientX - MAP.lastTouch.x;
+                        MAP.transform.y += e.clientY - MAP.lastTouch.y;
+                        MAP.lastTouch = { x: e.clientX, y: e.clientY };
+                    }
+                });
+                const endPointer = () => { MAP.isDrawing = false; MAP.lastTouch = null; };
+                MAP.canvas.addEventListener('pointerup', endPointer);
+                MAP.canvas.addEventListener('pointerleave', endPointer);
+
+                MAP.canvas.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 1) {
+                        if (STATE.mode === 'paint') {
+                            MAP.isDrawing = true;
+                            MAP.paintCell(e.touches[0].clientX, e.touches[0].clientY);
+                        } else {
+                            MAP.lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                        }
+                    } else if (e.touches.length === 2 && STATE.mode === 'view') {
+                        MAP.initialPinchDist = getDistance(e.touches);
+                        MAP.initialScale = MAP.transform.scale;
+                        MAP.lastTouch = getCenter(e.touches);
+                    }
+                }, { passive: false });
+
+                MAP.canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault(); 
+                    if (e.touches.length === 1) {
+                        if (STATE.mode === 'paint' && MAP.isDrawing) {
+                            MAP.paintCell(e.touches[0].clientX, e.touches[0].clientY);
+                        } else if (STATE.mode === 'view' && MAP.lastTouch && !MAP.initialPinchDist) {
+                            MAP.transform.x += e.touches[0].clientX - MAP.lastTouch.x;
+                            MAP.transform.y += e.touches[0].clientY - MAP.lastTouch.y;
+                            MAP.lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                        }
+                    } else if (e.touches.length === 2 && STATE.mode === 'view') {
+                        const dist = getDistance(e.touches);
+                        const center = getCenter(e.touches);
+                        
+                        if (MAP.initialPinchDist) {
+                            const newScale = Math.max(0.2, Math.min(MAP.initialScale * (dist / MAP.initialPinchDist), 5));
+                            
+                            MAP.transform.x = center.x - (center.x - MAP.transform.x) * (newScale / MAP.transform.scale);
+                            MAP.transform.y = center.y - (center.y - MAP.transform.y) * (newScale / MAP.transform.scale);
+                            MAP.transform.scale = newScale;
+                            
+                            MAP.transform.x += center.x - MAP.lastTouch.x;
+                            MAP.transform.y += center.y - MAP.lastTouch.y;
+                            MAP.lastTouch = center;
+                        }
+                    }
+                }, { passive: false });
+
+                const endTouch = () => {
+                    MAP.isDrawing = false;
+                    MAP.lastTouch = null;
+                    MAP.initialPinchDist = null;
+                };
+                MAP.canvas.addEventListener('touchend', endTouch);
+                MAP.canvas.addEventListener('touchcancel', endTouch);
+                
+                MAP.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const delta = -e.deltaY * 0.001;
+                    const newScale = Math.max(0.2, Math.min(MAP.transform.scale * (1 + delta), 5));
                     
-                    const img = new Image();
-                    img.onload = () => { bgMapImage = img; resetView(); };
-                    img.src = offCanvas.toDataURL();
-                    alert("GeoTIFF画像を読み込みました。");
+                    MAP.transform.x = e.clientX - (e.clientX - MAP.transform.x) * (newScale / MAP.transform.scale);
+                    MAP.transform.y = e.clientY - (e.clientY - MAP.transform.y) * (newScale / MAP.transform.scale);
+                    MAP.transform.scale = newScale;
+                }, {passive: false});
+            },
+
+            loadBackground: async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (!STATE.currentSite) {
+                    alert("先に現場（ポリゴン）をロードして選択してください。");
+                    e.target.value = "";
+                    return;
+                }
+
+                UI.toggleSideMenu(false);
+                alert("地図を読み込んでいます...");
+
+                try {
+                    if (file.type === 'image/jpeg' || file.type === 'image/png') {
+                        const url = URL.createObjectURL(file);
+                        const img = new Image();
+                        img.onload = () => { 
+                            STATE.bgImage = img; 
+                            alert("地図の読み込みが完了しました。");
+                        };
+                        img.onerror = () => alert("画像の読み込みに失敗しました。");
+                        img.src = url;
+                    } else if (file.name.endsWith('.tif') || file.name.endsWith('.tiff')) {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+                        const image = await tiff.getImage();
+                        const width = image.getWidth();
+                        const height = image.getHeight();
+                        
+                        const rasters = await image.readRasters();
+                        
+                        const offscreen = document.createElement('canvas');
+                        offscreen.width = width;
+                        offscreen.height = height;
+                        const ctx = offscreen.getContext('2d');
+                        const imgData = ctx.createImageData(width, height);
+                        
+                        let r, g, b;
+                        for (let i = 0; i < width * height; i++) {
+                            r = rasters[0][i];
+                            g = rasters.length > 1 ? rasters[1][i] : r;
+                            b = rasters.length > 2 ? rasters[2][i] : r;
+                            
+                            imgData.data[i * 4] = r;
+                            imgData.data[i * 4 + 1] = g;
+                            imgData.data[i * 4 + 2] = b;
+                            imgData.data[i * 4 + 3] = 255; 
+                        }
+                        ctx.putImageData(imgData, 0, 0);
+                        STATE.bgImage = offscreen;
+                        alert("地図の読み込みが完了しました。");
+                    } else {
+                        alert("対応していないファイル形式です。");
+                    }
                 } catch (err) {
                     console.error(err);
-                    alert("GeoTIFFの解析に失敗しました: " + err.message);
+                    alert("地図画像の読み込みに失敗しました。ファイル形式を確認してください。");
                 }
-            } else {
+                
+                e.target.value = "";
+            },
+
+            paintCell: (screenX, screenY) => {
+                if (!STATE.currentSite) return;
+                const logicX = (screenX - MAP.transform.x) / MAP.transform.scale;
+                const logicY = (screenY - MAP.transform.y) / MAP.transform.scale;
+                
+                const col = Math.floor(logicX / 20);
+                const row = Math.floor(logicY / 20);
+                
+                if (col >= 0 && col < 40 && row >= 0 && row < 40) {
+                    const idx = row * 40 + col;
+                    if (STATE.currentSite.paintData[idx] !== STATE.brush.val) {
+                        STATE.currentSite.paintData[idx] = STATE.brush.val;
+                        if(navigator.vibrate) navigator.vibrate(5); 
+                    }
+                }
+            },
+
+            loop: () => {
+                MAP.ctx.clearRect(0, 0, MAP.canvas.width, MAP.canvas.height);
+                
+                MAP.ctx.fillStyle = '#0f172a'; 
+                MAP.ctx.fillRect(0,0, MAP.canvas.width, MAP.canvas.height);
+
+                if (STATE.currentSite) {
+                    MAP.ctx.save();
+                    MAP.ctx.translate(MAP.transform.x, MAP.transform.y);
+                    MAP.ctx.scale(MAP.transform.scale, MAP.transform.scale);
+
+                    if (STATE.bgImage) {
+                        const aspect = STATE.bgImage.width / STATE.bgImage.height;
+                        let drawW = 800, drawH = 800; 
+                        let offsetX = 0, offsetY = 0;
+
+                        if (aspect > 1) { 
+                            drawH = 800 / aspect;
+                            offsetY = (800 - drawH) / 2;
+                        } else { 
+                            drawW = 800 * aspect;
+                            offsetX = (800 - drawW) / 2;
+                        }
+                        MAP.ctx.drawImage(STATE.bgImage, offsetX, offsetY, drawW, drawH);
+                    }
+
+                    MAP.ctx.beginPath();
+                    STATE.currentSite.polygon.forEach((p, i) => {
+                        const x = MAP.lon2x(p[0]);
+                        const y = MAP.lat2y(p[1]);
+                        if (i === 0) MAP.ctx.moveTo(x, y);
+                        else MAP.ctx.lineTo(x, y);
+                    });
+                    MAP.ctx.closePath();
+                    MAP.ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+                    MAP.ctx.fill();
+                    MAP.ctx.lineWidth = 2;
+                    MAP.ctx.strokeStyle = '#ef4444'; 
+                    MAP.ctx.stroke();
+
+                    MAP.ctx.globalAlpha = 0.6;
+                    for (let r = 0; r < 40; r++) {
+                        for (let c = 0; c < 40; c++) {
+                            const val = STATE.currentSite.paintData[r * 40 + c];
+                            if (val > 0) {
+                                switch(val) {
+                                    case 1: MAP.ctx.fillStyle = '#ef4444'; break; 
+                                    case 2: MAP.ctx.fillStyle = '#3b82f6'; break; 
+                                    case 3: MAP.ctx.fillStyle = '#eab308'; break; 
+                                    case 4: MAP.ctx.fillStyle = '#a855f7'; break; 
+                                }
+                                MAP.ctx.fillRect(c * 20, r * 20, 20, 20);
+                            }
+                        }
+                    }
+                    MAP.ctx.globalAlpha = 1.0;
+
+                    MAP.ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                    MAP.ctx.lineWidth = 1;
+                    MAP.ctx.strokeRect(0, 0, 800, 800);
+
+                    MAP.ctx.restore();
+                }
+
+                if(STATE.mode === 'view') {
+                    MAP.ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    MAP.ctx.beginPath();
+                    MAP.ctx.moveTo(MAP.canvas.width/2 - 10, MAP.canvas.height/2);
+                    MAP.ctx.lineTo(MAP.canvas.width/2 + 10, MAP.canvas.height/2);
+                    MAP.ctx.moveTo(MAP.canvas.width/2, MAP.canvas.height/2 - 10);
+                    MAP.ctx.lineTo(MAP.canvas.width/2, MAP.canvas.height/2 + 10);
+                    MAP.ctx.stroke();
+                }
+
+                requestAnimationFrame(MAP.loop);
+            },
+            
+            centerOnGPS: () => {
+                if(!STATE.currentSite) return;
+                MAP.transform.x = MAP.canvas.width / 2 - 400 * MAP.transform.scale;
+                MAP.transform.y = MAP.canvas.height / 2 - 400 * MAP.transform.scale;
+            }
+        };
+
+        const SYNC = {
+            openMergeScanner: () => {
+                if(!STATE.currentSite) return alert("現場を選択してください");
+                QR.startScan((data) => {
+                    try {
+                        const payload = JSON.parse(data);
+                        const isMergePayload = payload && payload.id && Array.isArray(payload.c) && typeof payload.p === 'string';
+                        const isSitePayload = payload && payload.id && Array.isArray(payload.poly);
+
+                        if (isMergePayload) {
+                            if(payload.id !== STATE.activeSiteId) {
+                                alert("別の現場のデータです。マージできません。");
+                                return;
+                            }
+                            for(let i=0; i<4; i++) {
+                                STATE.currentSite.counters[i] += (payload.c[i] || 0);
+                            }
+                            const extPaint = RLE.decode(payload.p);
+                            for(let i=0; i<1600; i++) {
+                                if(extPaint[i] > STATE.currentSite.paintData[i]) {
+                                    STATE.currentSite.paintData[i] = extPaint[i]; 
+                                }
+                            }
+                            DB.saveSite(STATE.currentSite);
+                            UI.renderCounters();
+                            UI.renderSideMenu();
+                            alert("仲間のデータとマージ完了しました！");
+                        } else if (isSitePayload) {
+                            alert("このQRコードは新しい現場登録用です。ヘッダーのメッセージか右上のカメラボタンから読み込んでください。");
+                        } else {
+                            alert("無効なQRデータです");
+                        }
+                    } catch(e) {
+                        alert("QRの解析に失敗しました。");
+                        console.error(e);
+                    }
+                });
+            },
+            showExportQR: () => {
+                if(!STATE.currentSite) return alert("現場を選択してください");
+                const payload = {
+                    id: STATE.activeSiteId,
+                    c: STATE.currentSite.counters,
+                    p: RLE.encode(STATE.currentSite.paintData)
+                };
+                const jsonStr = JSON.stringify(payload);
+                document.getElementById('qr-modal-title').innerText = "PC提出用 QR";
+                document.getElementById('qr-modal').classList.remove('hidden');
+                document.getElementById('qr-display').classList.remove('hidden');
+                document.getElementById('qr-reader').classList.add('hidden');
+                
+                const qrContainer = document.getElementById('qr-canvas-container');
+                qrContainer.innerHTML = ''; 
+                new QRCode(qrContainer, {
+                    text: jsonStr,
+                    width: 240,
+                    height: 240,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.L 
+                });
+                
+                document.getElementById('qr-export-text').innerText = jsonStr; 
+            },
+            copyExportQR: () => {
+                const text = document.getElementById('qr-export-text').innerText;
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    alert("クリップボードにコピーしました！");
+                } catch (err) {
+                    alert("コピーに失敗しました。お手数ですが手動で選択してコピーしてください。");
+                }
+                document.body.removeChild(textArea);
+            }
+        };
+
+        // jsQR + getUserMedia を使ったカスタムQRスキャナー
+        const QR = {
+            stream: null,
+            frameRequestId: null,
+            callback: null,
+            scanning: false,
+            startScan: (callback = null) => {
+                UI.toggleSideMenu(false);
+                QR.callback = callback;
+                document.getElementById('qr-modal-title').innerText = "QRスキャン";
+                document.getElementById('qr-modal').classList.remove('hidden');
+                document.getElementById('qr-display').classList.add('hidden');
+                document.getElementById('qr-reader').classList.remove('hidden');
+
+                QR.startCamera();
+            },
+            startCamera: () => {
+                const video = document.getElementById('qr-video');
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert("この端末やブラウザではカメラが利用できません。画像ファイルからの読み取りをご利用ください。");
+                    return;
+                }
+                navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: 'environment' } }
+                }).then(stream => {
+                    QR.stream = stream;
+                    video.srcObject = stream;
+                    video.play().catch(() => {});
+                    QR.scanning = true;
+                    QR.scanLoop();
+                }).catch(err => {
+                    console.error(err);
+                    alert("カメラを起動できませんでした。ブラウザのカメラ権限やHTTPS接続をご確認ください。");
+                });
+            },
+            scanLoop: () => {
+                if (!QR.scanning) return;
+                const video = document.getElementById('qr-video');
+                const canvas = document.getElementById('qr-canvas');
+                const ctx = canvas.getContext('2d');
+
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    const width = video.videoWidth;
+                    const height = video.videoHeight;
+                    if (width && height) {
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(video, 0, 0, width, height);
+                        const imageData = ctx.getImageData(0, 0, width, height);
+                        const code = jsQR(imageData.data, width, height, { inversionAttempts: "dontInvert" });
+                        if (code && code.data) {
+                            QR.handleResult(code.data);
+                            return;
+                        }
+                    }
+                }
+                QR.frameRequestId = requestAnimationFrame(QR.scanLoop);
+            },
+            scanImageFile: (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
                 const reader = new FileReader();
-                reader.onload = (ev) => {
+                reader.onload = () => {
                     const img = new Image();
-                    img.onload = () => { bgMapImage = img; resetView(); };
-                    img.src = ev.target.result;
+                    img.onload = () => {
+                        const canvas = document.getElementById('qr-canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        ctx.drawImage(img, 0, 0);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, canvas.width, canvas.height, { inversionAttempts: "dontInvert" });
+                        if (code && code.data) {
+                            QR.handleResult(code.data);
+                        } else {
+                            alert("QRコードを検出できませんでした。画像のピントや明るさをご確認ください。");
+                        }
+                    };
+                    img.src = reader.result;
                 };
                 reader.readAsDataURL(file);
-            }
-            document.getElementById('side-menu').classList.replace('menu-open', 'menu-closed');
-            e.target.value = '';
-        });
-
-        // --- Camera & QR Reader Logic ---
-        let html5QrCode;
-        let qrScanCallback = null;
-
-        function startQrReader(onSuccess) {
-            qrScanCallback = onSuccess;
-            document.getElementById('qr-reader-modal').classList.remove('hidden');
-            
-            html5QrCode = new Html5Qrcode("qr-reader");
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-            
-            html5QrCode.start({ facingMode: "environment" }, config, 
-                (decodedText) => {
-                    stopQrReader();
-                    if(qrScanCallback) qrScanCallback(decodedText);
-                },
-                (errorMessage) => { /* ignore parse errors */ }
-            ).catch(err => {
-                alert("カメラの起動に失敗しました。ブラウザのカメラ権限を確認してください。");
-                stopQrReader();
-            });
-        }
-
-        function stopQrReader() {
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    html5QrCode.clear();
-                    document.getElementById('qr-reader-modal').classList.add('hidden');
-                }).catch(err => {
-                    document.getElementById('qr-reader-modal').classList.add('hidden');
-                });
-            } else {
-                document.getElementById('qr-reader-modal').classList.add('hidden');
-            }
-        }
-        
-        document.getElementById('btn-close-qr-reader').addEventListener('click', stopQrReader);
-
-        // --- 現場看板スキャン処理 (チェックイン) ---
-        document.getElementById('btn-scan-checkin').addEventListener('click', () => {
-            document.getElementById('side-menu').classList.replace('menu-open', 'menu-closed');
-            startQrReader(processSignboardQR);
-        });
-
-        function processSignboardQR(decodedText) {
-            try {
-                const data = JSON.parse(decodedText);
-                if(data.type !== 'checkin') throw new Error("無効なQR形式です");
-                
-                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                let validPointsFound = false;
-                
-                if (data.geom && data.geom.features) {
-                    data.geom.features.forEach(f => {
-                        let coords = [];
-                        if(f.geometry.type === 'Polygon') coords = f.geometry.coordinates[0];
-                        else if(f.geometry.type === 'MultiPolygon') coords = f.geometry.coordinates[0][0];
-                        
-                        coords.forEach(p => {
-                            minX = Math.min(minX, p[0]); minY = Math.min(minY, p[1]);
-                            maxX = Math.max(maxX, p[0]); maxY = Math.max(maxY, p[1]);
-                            validPointsFound = true;
-                        });
-                    });
-                }
-                
-                let relPoints = [];
-                if (validPointsFound) {
-                    const w = maxX - minX; const h = maxY - minY;
-                    const padX = w * 0.1 || 100; const padY = h * 0.1 || 100;
-                    const effMinX = minX - padX, effMaxX = maxX + padX;
-                    const effMinY = minY - padY, effMaxY = maxY + padY;
-                    const effW = effMaxX - effMinX, effH = effMaxY - effMinY;
-
-                    data.geom.features.forEach(f => {
-                        let coords = [];
-                        if(f.geometry.type === 'Polygon') coords = f.geometry.coordinates[0];
-                        else if(f.geometry.type === 'MultiPolygon') coords = f.geometry.coordinates[0][0];
-                        
-                        coords.forEach(p => {
-                            let rx = (p[0] - effMinX) / effW;
-                            let ry = 1.0 - ((p[1] - effMinY) / effH); // WebメルカトルY反転
-                            relPoints.push({x: rx, y: ry});
-                        });
-                    });
+                event.target.value = "";
+            },
+            handleResult: (decodedText) => {
+                QR.close();
+                if (QR.callback) {
+                    QR.callback(decodedText);
                 } else {
-                    relPoints = [{x: 0.2, y: 0.2}, {x: 0.8, y: 0.2}, {x: 0.8, y: 0.8}, {x: 0.2, y: 0.8}];
+                    App.handleNewSiteQR(decodedText);
                 }
-
-                const newPoly = { id: data.id || 'Unknown', name: data.name || '新規現場', points: relPoints };
-                sitePolygons.push(newPoly);
-                updatePolygonList();
-                selectPolygon(newPoly.id);
-                resetView();
-                alert(`「${newPoly.name}」のデータをセットしました。`);
-
-            } catch(e) {
-                console.error(e);
-                alert("読み込みに失敗しました。正しい林業GIS Proの現場看板QRか確認してください。");
+            },
+            stopCamera: () => {
+                QR.scanning = false;
+                if (QR.frameRequestId) {
+                    cancelAnimationFrame(QR.frameRequestId);
+                    QR.frameRequestId = null;
+                }
+                if (QR.stream) {
+                    QR.stream.getTracks().forEach(t => t.stop());
+                    QR.stream = null;
+                }
+                const video = document.getElementById('qr-video');
+                if (video) {
+                    video.srcObject = null;
+                }
+            },
+            close: () => {
+                QR.stopCamera();
+                document.getElementById('qr-modal').classList.add('hidden');
             }
-        }
+        };
 
-        // --- 仲間のQRスキャン処理 (マージ) ---
-        document.getElementById('btn-scan-partner').addEventListener('click', () => {
-            document.getElementById('sync-modal').classList.add('hidden');
-            startQrReader(processPartnerQR);
-        });
-
-        function processPartnerQR(decodedText) {
-            try {
-                const data = JSON.parse(decodedText);
-                if(!data.p || !data.c) throw new Error("無効なQR形式です");
-                
-                const incomingGrid = decompressMapData(data.p);
-                for (let i = 0; i < gridData.length; i++) {
-                    gridData[i] = Math.max(gridData[i], incomingGrid[i]);
+        const App = {
+            init: async () => {
+                await DB.init();
+                const sites = await DB.getAllSites();
+                if(sites.length > 0) {
+                    sites.sort((a,b) => b.lastUpdated - a.lastUpdated);
+                    await App.loadSite(sites[0].siteId);
                 }
                 
-                counters.felling += data.c[0] || 0;
-                counters.yarding += data.c[1] || 0;
-                counters.bucking += data.c[2] || 0;
-                counters.forwarding += data.c[3] || 0;
-                
-                updateCountersUI();
-                renderCanvas();
-                alert("仲間の進捗データをマージ（合体）しました！");
+                UI.init();
+                MAP.init();
+            },
+            loadSite: async (siteId) => {
+                const site = await DB.getSite(siteId);
+                if (site) {
+                    STATE.activeSiteId = site.siteId;
+                    STATE.currentSite = site;
+                    MAP.transform.x = window.innerWidth / 2 - 400;
+                    MAP.transform.y = window.innerHeight / 2 - 400;
+                    MAP.transform.scale = 1;
+                    
+                    UI.updateHeader();
+                    UI.renderCounters();
+                    UI.toggleSideMenu(false);
+                }
+            },
+            handleNewSiteQR: async (jsonStr) => {
+                try {
+                    const data = JSON.parse(jsonStr);
 
-            } catch(e) {
-                console.error(e);
-                alert("読み込みに失敗しました。正しい進捗データQRか確認してください。");
+                    // --- 1) 現場看板QR (PC → モバイル)
+                    // 超コンパクト: { i, n?, b: \"wwwwwweeeeee\" }  (base36で bbox をエンコード)
+                    // 標準: { id, name?, poly: [[lon,lat]...] }
+                    // 旧: { type:\"checkin\", id, name, geom: GeoJSON FeatureCollection }
+                    let poly = null;
+                    let siteId = data.id || data.i;
+                    let siteName = data.name || data.n || siteId;
+
+                    if (typeof data.b === 'string' && data.b.length === 12) {
+                        const decodePair = (str) => {
+                            const lonInt = parseInt(str.slice(0, 3), 36);
+                            const latInt = parseInt(str.slice(3, 6), 36);
+                            const lon = lonInt / 100 - 180;
+                            const lat = latInt / 100 - 90;
+                            return [lon, lat];
+                        };
+                        const [w, s] = decodePair(data.b.slice(0, 6));
+                        const [e, n] = decodePair(data.b.slice(6, 12));
+                        poly = [[w, s], [e, s], [e, n], [w, n], [w, s]];
+                    } else if (Array.isArray(data.b) && data.b.length >= 4) {
+                        const [w, s, e, n] = data.b;
+                        poly = [[w, s], [e, s], [e, n], [w, n], [w, s]];
+                    } else if (Array.isArray(data.poly)) {
+                        poly = data.poly;
+                    } else if (data.geom && Array.isArray(data.geom.features) && data.geom.features.length > 0) {
+                        const g = data.geom.features[0].geometry;
+                        if (g && g.type === 'Polygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0) {
+                            poly = g.coordinates[0];
+                        } else if (g && g.type === 'MultiPolygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0) {
+                            poly = g.coordinates[0][0];
+                        }
+                    }
+
+                    const isSiteQR = siteId && Array.isArray(poly);
+                    const isResultQR = data && data.id && Array.isArray(data.c) && typeof data.p === 'string';
+
+                    if (isSiteQR) {
+                        let minLon=180, maxLon=-180, minLat=90, maxLat=-90;
+                        poly.forEach(p => {
+                            if(p[0] < minLon) minLon = p[0];
+                            if(p[0] > maxLon) maxLon = p[0];
+                            if(p[1] < minLat) minLat = p[1];
+                            if(p[1] > maxLat) maxLat = p[1];
+                        });
+                        
+                        const newSite = {
+                            siteId: siteId,
+                            name: siteName,
+                            polygon: poly,
+                            bbox: [minLon, minLat, maxLon, maxLat],
+                            paintData: Array(1600).fill(0),
+                            counters: [0, 0, 0, 0]
+                        };
+                        await DB.saveSite(newSite);
+                        await App.loadSite(siteId);
+                        alert(`新しい現場「${newSite.name}」を読み込みました。`);
+                    } else if (isResultQR) {
+                        // PC提出用 / 仲間とのマージ用QRを誤って「現場看板QR」として読んだ場合の扱い
+                        if (!STATE.currentSite || STATE.activeSiteId !== data.id) {
+                            alert("このQRコードは作業実績（マージ／PC提出）用です。現場を選択し、Sync Hub の「仲間と同期」から読み込んでください。");
+                            return;
+                        }
+                        // 現在の現場とIDが一致している場合は、そのままマージしてあげる
+                        for(let i=0; i<4; i++) {
+                            STATE.currentSite.counters[i] += (data.c[i] || 0);
+                        }
+                        const extPaint = RLE.decode(data.p);
+                        for(let i=0; i<1600; i++) {
+                            if(extPaint[i] > STATE.currentSite.paintData[i]) {
+                                STATE.currentSite.paintData[i] = extPaint[i]; 
+                            }
+                        }
+                        await DB.saveSite(STATE.currentSite);
+                        UI.renderCounters();
+                        UI.renderSideMenu();
+                        alert("作業実績QRを取り込み、現在の現場にマージしました。");
+                    } else {
+                        alert("対応していないQRフォーマットです");
+                    }
+                } catch(e) {
+                    alert("QRの解析に失敗しました。");
+                    console.error(e);
+                }
             }
-        }
+        };
 
-        // --- UI & Interactions ---
-        function selectPolygon(id) {
-            selectedPolygonId = id; const poly = sitePolygons.find(p => p.id === id);
-            if (poly) {
-                document.getElementById('prop-site-name').textContent = poly.name;
-                document.getElementById('prop-site-id').textContent = poly.id;
-                document.getElementById('property-card').classList.remove('hidden');
-                document.getElementById('side-menu').classList.replace('menu-open', 'menu-closed');
-            }
-            renderCanvas();
-        }
+        window.addEventListener('DOMContentLoaded', App.init);
 
-        document.getElementById('btn-close-prop').addEventListener('click', () => { document.getElementById('property-card').classList.add('hidden'); selectedPolygonId = null; renderCanvas(); });
-
-        const sideMenu = document.getElementById('side-menu');
-        document.getElementById('btn-toggle-menu').addEventListener('click', () => sideMenu.classList.replace('menu-closed', 'menu-open'));
-        document.getElementById('btn-close-menu').addEventListener('click', () => sideMenu.classList.replace('menu-open', 'menu-closed'));
-
-        function updatePolygonList() {
-            const list = document.getElementById('polygon-list');
-            if (sitePolygons.length === 0) return;
-            list.innerHTML = '';
-            sitePolygons.forEach(poly => {
-                const li = document.createElement('li');
-                li.className = "p-3 hover:bg-slate-700 active:bg-slate-600 cursor-pointer flex justify-between items-center transition-colors";
-                li.innerHTML = `<div><div class="text-sm font-bold text-white">${poly.name}</div><div class="text-xs text-slate-400">${poly.id}</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-slate-500"></i>`;
-                li.addEventListener('click', () => selectPolygon(poly.id));
-                list.appendChild(li);
-            });
-            lucide.createIcons({ root: list });
-        }
-
-        const recordSheet = document.getElementById('record-sheet');
-        const fab = document.getElementById('btn-open-record');
-        document.getElementById('btn-open-record').addEventListener('click', () => { isRecordMode = true; recordSheet.classList.replace('drawer-closed', 'drawer-open'); document.getElementById('map-container').classList.add('record-mode-active'); fab.style.display = 'none'; renderCanvas(); });
-        document.getElementById('btn-close-record').addEventListener('click', () => { isRecordMode = false; recordSheet.classList.replace('drawer-open', 'drawer-closed'); document.getElementById('map-container').classList.remove('record-mode-active'); fab.style.display = 'flex'; renderCanvas(); });
-
-        const tabPaint = document.getElementById('tab-paint'), tabCounter = document.getElementById('tab-counter');
-        const contentPaint = document.getElementById('content-paint'), contentCounter = document.getElementById('content-counter');
-        function switchTab(mode) {
-            if (mode === 'paint') {
-                tabPaint.className = "flex-1 py-2.5 text-yellow-600 border-b-2 border-yellow-500 bg-yellow-50 flex justify-center items-center gap-2 transition-colors";
-                tabCounter.className = "flex-1 py-2.5 text-slate-500 border-b-2 border-transparent hover:bg-slate-50 flex justify-center items-center gap-2 transition-colors";
-                contentPaint.classList.remove('hidden'); contentCounter.classList.replace('grid', 'hidden');
-            } else {
-                tabCounter.className = "flex-1 py-2.5 text-blue-600 border-b-2 border-blue-500 bg-blue-50 flex justify-center items-center gap-2 transition-colors";
-                tabPaint.className = "flex-1 py-2.5 text-slate-500 border-b-2 border-transparent hover:bg-slate-50 flex justify-center items-center gap-2 transition-colors";
-                contentCounter.classList.replace('hidden', 'grid'); contentPaint.classList.add('hidden');
-            }
-        }
-        tabPaint.addEventListener('click', () => switchTab('paint')); tabCounter.addEventListener('click', () => switchTab('counter'));
-
-        function updateCountersUI() {
-            ['felling', 'yarding', 'bucking', 'forwarding'].forEach(k => {
-                document.getElementById(`sheet-count-${k}`).textContent = counters[k];
-                document.getElementById(`menu-${k}`).textContent = counters[k];
-            });
-        }
-
-        document.querySelectorAll('.btn-counter-inc').forEach(btn => btn.addEventListener('click', (e) => { counters[e.currentTarget.dataset.target] += parseInt(e.currentTarget.dataset.amount); updateCountersUI(); }));
-        document.querySelectorAll('.btn-counter-dec').forEach(btn => btn.addEventListener('click', (e) => { const t = e.currentTarget.dataset.target, a = parseInt(e.currentTarget.dataset.amount); if (counters[t] >= a) { counters[t] -= a; updateCountersUI(); } }));
-
-        function updateBrushUI() {
-            [1, 2, 3, 4, 0].forEach(val => {
-                const el = document.getElementById(`btn-brush-${val}`);
-                el.classList.remove('border-slate-800', 'scale-105'); if (currentBrush === val) el.classList.add('border-slate-800', 'scale-105');
-            });
-        }
-        [1, 2, 3, 4, 0].forEach(val => document.getElementById(`btn-brush-${val}`).addEventListener('click', () => { currentBrush = val; updateBrushUI(); }));
-
-        document.getElementById('btn-toggle-gps').addEventListener('click', () => {
-            const btn = document.getElementById('btn-toggle-gps'), icon = document.getElementById('icon-gps');
-            if (!gpsWatchId) {
-                btn.classList.replace('bg-white/90', 'bg-blue-600'); icon.classList.replace('text-slate-700', 'text-white');
-                let mx = 0.5, my = 0.5;
-                gpsWatchId = setInterval(() => { mx += (Math.random()-0.5)*0.02; my += (Math.random()-0.5)*0.02; gpsPosition = {x:mx, y:my}; renderCanvas(); }, 1000);
-            } else {
-                clearInterval(gpsWatchId); gpsWatchId = null; gpsPosition = null;
-                btn.classList.replace('bg-blue-600', 'bg-white/90'); icon.classList.replace('text-white', 'text-slate-700'); renderCanvas();
-            }
-        });
-
-        // --- Sync Modal ---
-        const syncModal = document.getElementById('sync-modal');
-        document.getElementById('btn-show-sync').addEventListener('click', () => {
-            sideMenu.classList.replace('menu-open', 'menu-closed');
-            const payloadStr = JSON.stringify({ p: compressMapData(), c: [counters.felling, counters.yarding, counters.bucking, counters.forwarding] });
-            document.getElementById('payload-copy-text').value = payloadStr;
-            const qrContainer = document.getElementById('qrcode-container');
-　　　　　　 qrContainer.innerHTML = ''; 
-            new QRCode(qrContainer, { 
-            text: payloadStr, 
-            width: 250, 
-            height: 250, 
-            correctLevel : QRCode.CorrectLevel.L  // ← これを追加（ドットが粗くなり読み取りやすくなる）
-        });
-            syncModal.classList.remove('hidden');
-        });
-
-        document.getElementById('btn-close-sync-modal').addEventListener('click', () => syncModal.classList.add('hidden'));
-        document.getElementById('btn-copy-payload').addEventListener('click', () => {
-            const t = document.getElementById('payload-copy-text'); t.select(); document.execCommand('copy');
-            const b = document.getElementById('btn-copy-payload'); b.innerHTML = '<i data-lucide="check" class="w-3 h-3 text-emerald-600"></i>'; lucide.createIcons({root: b.parentElement});
-            setTimeout(() => { b.innerHTML = '<i data-lucide="copy" class="w-3 h-3"></i>'; lucide.createIcons({root: b.parentElement}); }, 2000);
-        });
-
-        // Init
-        resizeCanvas(); updateBrushUI();
     </script>
 </body>
 </html>
