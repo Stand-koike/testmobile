@@ -898,6 +898,29 @@
             }
         };
 
+        // 現場看板の分割QR（F1/4|...）を順に集めて結合する用
+        let signboardChunkState = { total: 0, chunks: {} };
+        function handleSignboardChunk(text) {
+            const m = text.match(/^F(\d+)\/(\d+)\|([\s\S]*)$/);
+            if (!m) return false;
+            const idx = parseInt(m[1], 10), total = parseInt(m[2], 10), content = m[3];
+            if (signboardChunkState.total !== total) signboardChunkState = { total, chunks: {} };
+            signboardChunkState.chunks[idx] = content;
+            const keys = Object.keys(signboardChunkState.chunks);
+            if (keys.length === total) {
+                let full = '';
+                for (let i = 1; i <= total; i++) full += (signboardChunkState.chunks[i] || '');
+                signboardChunkState = { total: 0, chunks: {} };
+                QR.close();
+                App.handleNewSiteQR(full);
+            } else {
+                const next = [1,2,3,4,5,6].slice(0, total).find(j => !signboardChunkState.chunks[j]);
+                const labels = ['①','②','③','④','⑤','⑥'];
+                alert(keys.length + "/" + total + " 枚目を読み取りました。次は " + (labels[next-1] || next) + " " + next + " 枚目をスキャンしてください。");
+            }
+            return true;
+        }
+
         // jsQR + getUserMedia を使ったカスタムQRスキャナー
         const QR = {
             stream: null,
@@ -905,6 +928,7 @@
             callback: null,
             scanning: false,
             startScan: (callback = null) => {
+                signboardChunkState = { total: 0, chunks: {} };
                 UI.toggleSideMenu(false);
                 QR.callback = callback;
                 document.getElementById('qr-modal-title').innerText = "QRスキャン";
@@ -982,6 +1006,10 @@
                 event.target.value = "";
             },
             handleResult: (decodedText) => {
+                if (/^F\d+\/\d+\|/.test(decodedText)) {
+                    handleSignboardChunk(decodedText);
+                    return;
+                }
                 QR.close();
                 if (QR.callback) {
                     QR.callback(decodedText);
@@ -1038,7 +1066,9 @@
             },
             handleNewSiteQR: async (jsonStr) => {
                 try {
-                    const data = JSON.parse(jsonStr);
+                    const raw = (jsonStr && typeof jsonStr === 'string') ? jsonStr.trim() : String(jsonStr);
+                    if (!raw) { alert("QRの内容が空です"); return; }
+                    const data = JSON.parse(raw);
 
                     // --- 1) 現場看板QR (PC → モバイル)
                     // 超コンパクト: { i, n?, b: \"wwwwwweeeeee\" }  (base36で bbox をエンコード)
@@ -1120,8 +1150,8 @@
                         alert("対応していないQRフォーマットです");
                     }
                 } catch(e) {
-                    alert("QRの解析に失敗しました。");
                     console.error(e);
+                    alert("QRの解析に失敗しました。\n（現場看板QRまたは作業実績QRかご確認ください）");
                 }
             }
         };
