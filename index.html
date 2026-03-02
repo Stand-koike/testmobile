@@ -221,6 +221,11 @@
             <div id="qr-display" class="hidden bg-white p-6 rounded-xl w-full max-w-sm flex flex-col items-center justify-center">
                 <!-- 実際のQRコードが描画されるコンテナ -->
                 <div id="qr-canvas-container" class="flex justify-center items-center bg-white p-2 rounded-lg"></div>
+                <div id="qr-export-counter-wrap" class="hidden mt-2 flex items-center justify-center gap-2">
+                    <button id="qr-export-prev" class="w-10 h-10 rounded-full bg-slate-200 text-slate-700 font-bold">‹</button>
+                    <span id="qr-export-counter" class="text-sm font-bold text-slate-600"></span>
+                    <button id="qr-export-next" class="w-10 h-10 rounded-full bg-slate-200 text-slate-700 font-bold">›</button>
+                </div>
                 <p class="mt-4 text-sm text-slate-600 font-bold">PC・仲間のモバイルで読み取ってください</p>
                 <!-- バックアップ用テキスト -->
                 <div class="mt-2 w-full h-16 overflow-y-auto bg-slate-100 p-2 rounded cursor-text" style="user-select: text; -webkit-user-select: text;">
@@ -1394,15 +1399,39 @@
                 document.getElementById('qr-reader').classList.add('hidden');
                 
                 const qrContainer = document.getElementById('qr-canvas-container');
-                qrContainer.innerHTML = ''; 
-                new QRCode(qrContainer, {
-                    text: jsonStr,
-                    width: 240,
-                    height: 240,
-                    colorDark : "#000000",
-                    colorLight : "#ffffff",
-                    correctLevel : QRCode.CorrectLevel.L 
-                });
+                qrContainer.innerHTML = '';
+                const EXPORT_CHUNK_MAX = 420;
+                const exportChunks = jsonStr.length <= EXPORT_CHUNK_MAX ? [jsonStr] : (() => {
+                    const arr = [];
+                    const n = Math.ceil(jsonStr.length / EXPORT_CHUNK_MAX);
+                    for (let i = 0; i < n; i++) {
+                        const part = jsonStr.slice(i * EXPORT_CHUNK_MAX, (i + 1) * EXPORT_CHUNK_MAX);
+                        arr.push('E' + (i + 1) + '/' + n + '|' + part);
+                    }
+                    return arr;
+                })();
+                SYNC._exportChunks = exportChunks;
+                SYNC._exportIdx = 0;
+                const renderExportQR = () => {
+                    qrContainer.innerHTML = '';
+                    new QRCode(qrContainer, {
+                        text: exportChunks[SYNC._exportIdx],
+                        width: 280,
+                        height: 280,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.L
+                    });
+                    const cnt = document.getElementById('qr-export-counter');
+                    if (cnt) cnt.textContent = exportChunks.length > 1 ? (SYNC._exportIdx + 1) + '/' + exportChunks.length : '';
+                };
+                renderExportQR();
+                const cntWrap = document.getElementById('qr-export-counter-wrap');
+                if (cntWrap) cntWrap.style.display = exportChunks.length > 1 ? 'block' : 'none';
+                const prevBtn = document.getElementById('qr-export-prev');
+                const nextBtn = document.getElementById('qr-export-next');
+                if (prevBtn) prevBtn.onclick = () => { SYNC._exportIdx = Math.max(0, SYNC._exportIdx - 1); renderExportQR(); };
+                if (nextBtn) nextBtn.onclick = () => { SYNC._exportIdx = Math.min(exportChunks.length - 1, SYNC._exportIdx + 1); renderExportQR(); };
                 
                 document.getElementById('qr-export-text').innerText = jsonStr; 
             },
@@ -1483,9 +1512,10 @@
             lastChunkKey = '';
             lastChunkTime = 0;
             try {
-                const raw = (typeof LZString !== 'undefined' && LZString.decompressFromEncodedURIComponent)
+                let raw = (typeof LZString !== 'undefined' && LZString.decompressFromEncodedURIComponent)
                     ? LZString.decompressFromEncodedURIComponent(full)
-                    : full;
+                    : null;
+                if (!raw) raw = full;
                 const parsed = JSON.parse(raw || '{}');
                 QR.close();
                 if (parsed.type === 'featureCollection' && parsed.geom) {
