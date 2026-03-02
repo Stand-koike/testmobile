@@ -130,7 +130,7 @@
 
     <!-- 6. サイドメニュー (ダッシュボード) -->
     <div id="side-menu-bg" onclick="UI.toggleSideMenu(false)" class="fixed inset-0 bg-black/50 z-50 hidden backdrop-blur-sm"></div>
-    <div id="side-menu" class="fixed inset-y-0 right-0 w-36 max-w-[42vw] bg-slate-900 border-l border-slate-700 z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
+    <div id="side-menu" class="fixed inset-y-0 right-0 w-1/2 max-w-[50vw] bg-slate-900 border-l border-slate-700 z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
         <div class="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
             <h2 class="font-bold text-lg">現場ダッシュボード</h2>
             <button onclick="UI.toggleSideMenu(false)" class="p-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -172,18 +172,6 @@
                 </div>
                 </div>
 
-            <!-- 属性テーブル -->
-            <div class="pt-2 border-t border-slate-700">
-                <h3 class="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider">属性テーブル</h3>
-                <p class="text-[10px] text-slate-500 mb-1">行タップで地図上に表示</p>
-                <div id="attr-table-wrap" class="overflow-x-auto max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800">
-                    <table id="attr-table" class="w-full text-left text-xs border-collapse">
-                        <thead id="attr-table-head"></thead>
-                        <tbody id="attr-table-body"></tbody>
-                    </table>
-                </div>
-            </div>
-
             <!-- オフラインキャッシュ -->
             <div class="pt-2 border-t border-slate-700">
                 <h3 class="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider">オフラインキャッシュ</h3>
@@ -200,6 +188,21 @@
                     GeoTIFF / 画像をロード
                     <input type="file" accept=".tif,.tiff,.jpg,.png" class="hidden" onchange="MAP.loadBackground(event)">
                 </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- ポリゴン情報モーダル -->
+    <div id="polygon-modal" class="fixed inset-0 bg-black/70 z-[55] hidden flex-col items-center justify-center p-4">
+        <div class="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden shadow-xl">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
+                <h2 id="polygon-modal-title" class="font-bold text-lg">ポリゴン情報</h2>
+                <button onclick="UI.closePolygonModal()" class="p-2 bg-slate-800 rounded-full hover:bg-slate-700"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+            <div id="polygon-modal-body" class="flex-1 overflow-y-auto p-4 text-sm space-y-3"></div>
+            <div class="p-4 border-t border-slate-700 flex gap-2 shrink-0">
+                <button id="polygon-modal-select-btn" onclick="UI.selectPolygonFromModal()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-lg font-bold">この現場を選択</button>
+                <button id="polygon-modal-delete-btn" onclick="UI.deletePolygonFromModal()" class="px-4 py-3 bg-red-900/80 hover:bg-red-800 text-red-200 rounded-lg font-bold">削除</button>
             </div>
         </div>
     </div>
@@ -713,6 +716,57 @@
                 const el = document.getElementById('zoom-level');
                 if (el) el.textContent = String(STATE.viewZoom);
             },
+            showPolygonModal: (site) => {
+                if (!site) return;
+                const body = document.getElementById('polygon-modal-body');
+                const title = document.getElementById('polygon-modal-title');
+                if (!body || !title) return;
+                title.textContent = site.name || site.siteId || 'ポリゴン情報';
+                const rows = [
+                    ['名前', site.name || '-'],
+                    ['ID', site.siteId || '-']
+                ];
+                if (site.attributes && typeof site.attributes === 'object') {
+                    Object.entries(site.attributes).forEach(([k, v]) => {
+                        rows.push([k, v != null ? String(v) : '']);
+                    });
+                }
+                if (site.bbox && site.bbox.length >= 4) {
+                    const [w, s, e, n] = site.bbox;
+                    rows.push(['範囲', `${w.toFixed(5)}, ${s.toFixed(5)} ～ ${e.toFixed(5)}, ${n.toFixed(5)}`]);
+                }
+                const c = site.counters || [0, 0, 0, 0];
+                const conf = STATE.countersConf || [];
+                const unit = (i) => (conf[i] && conf[i].unit) || (i < 2 ? '本' : '㎥');
+                const name4 = (i) => (conf[i] && conf[i].name) || ['伐採','集材','造材','運材'][i];
+                const counterRows = [0, 1, 2, 3].map(i => [name4(i), `${c[i]} ${unit(i)}`]);
+                const allRows = [...rows, ...counterRows];
+                body.innerHTML = allRows.map(([k, v]) => {
+                    const kEsc = String(k).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const vEsc = String(v).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `<div class="flex gap-2"><span class="text-slate-500 shrink-0">${kEsc}:</span><span class="break-all">${vEsc || '-'}</span></div>`;
+                }).join('');
+                UI._polygonModalSite = site;
+                document.getElementById('polygon-modal').classList.remove('hidden');
+            },
+            closePolygonModal: () => {
+                document.getElementById('polygon-modal').classList.add('hidden');
+                UI._polygonModalSite = null;
+            },
+            selectPolygonFromModal: () => {
+                const site = UI._polygonModalSite;
+                if (site) {
+                    App.loadSite(site.siteId);
+                    UI.closePolygonModal();
+                }
+            },
+            deletePolygonFromModal: () => {
+                const site = UI._polygonModalSite;
+                if (site && confirm('このポリゴン（現場）を削除しますか？')) {
+                    App.deletePolygon(site.siteId);
+                    UI.closePolygonModal();
+                }
+            },
             renderSelectedProperties: () => {
                 const el = document.getElementById('selected-properties');
                 if (!el) return;
@@ -786,39 +840,7 @@
                         </div>
                     `;
                 });
-                await UI.renderAttributeTable();
                 UI.renderLayerList();
-            },
-            renderAttributeTable: async () => {
-                const headEl = document.getElementById('attr-table-head');
-                const bodyEl = document.getElementById('attr-table-body');
-                if (!headEl || !bodyEl) return;
-                const allSites = await DB.getAllSites();
-                const sites = allSites;
-                const baseCols = ['名前', 'ID'];
-                const attrKeys = new Set();
-                allSites.forEach(s => {
-                    if (s.attributes && typeof s.attributes === 'object') {
-                        Object.keys(s.attributes).forEach(k => attrKeys.add(k));
-                    }
-                });
-                const cols = [...baseCols, ...Array.from(attrKeys).sort(), '操作'];
-                headEl.innerHTML = '<tr class="bg-slate-700 text-slate-300 sticky top-0">' + cols.map(c => `<th class="px-2 py-1.5 border-b border-slate-600 whitespace-nowrap">${c}</th>`).join('') + '</tr>';
-                bodyEl.innerHTML = sites.length === 0
-                    ? `<tr><td colspan="${cols.length}" class="px-2 py-4 text-center text-slate-500">ポリゴンがありません</td></tr>`
-                    : sites.map(s => {
-                    const name = (s.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-                    const id = (s.siteId || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-                    const cells = [name, id];
-                    attrKeys.forEach(k => {
-                        const v = s.attributes && s.attributes[k];
-                        cells.push((v != null ? String(v) : '').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
-                    });
-                    const sid = String(s.siteId).replace(/'/g, "\\'");
-                    cells.push(`<button type="button" onclick="event.stopPropagation(); App.deletePolygon('${sid}')" class="text-red-400 hover:text-red-300 text-xs font-bold">削除</button>`);
-                    const isActive = s.siteId === STATE.activeSiteId;
-                    return `<tr class="border-b border-slate-700 hover:bg-slate-700/50 cursor-pointer ${isActive ? 'bg-blue-900/30' : ''}" onclick="App.loadSiteAndCenter('${sid}')">` + cells.map((c, i) => `<td class="px-2 py-1 border-slate-600 whitespace-nowrap">${c}</td>`).join('') + '</tr>';
-                }).join('');
             },
             renderLayerList: () => {
                 const el = document.getElementById('layer-list');
@@ -1337,7 +1359,7 @@
                 for (let i = STATE.polygonSites.length - 1; i >= 0; i--) {
                     const site = STATE.polygonSites[i];
                     if (site.polygon && MAP.pointInPolygon(ll.lon, ll.lat, site.polygon)) {
-                        App.loadSite(site.siteId);
+                        UI.showPolygonModal(site);
                         break;
                     }
                 }
