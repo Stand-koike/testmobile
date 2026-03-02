@@ -53,6 +53,7 @@
     <canvas id="mapCanvas" class="fixed inset-0 w-full h-full z-0"></canvas>
 
     <!-- 2. ヘッダー -->
+    <div id="gps-range-alert" class="hidden fixed top-14 left-0 right-0 z-50 bg-amber-600/90 text-white text-center py-1 text-sm font-bold">範囲外</div>
     <header id="app-header" class="fixed top-0 inset-x-0 h-14 bg-slate-900/80 backdrop-blur-md border-b border-slate-700 flex items-center justify-between px-4 z-40 transition-transform">
         <div class="flex items-center gap-2 overflow-hidden" onclick="UI.toggleSideMenu(true)">
             <!-- 現場アイコン -->
@@ -86,10 +87,11 @@
 
     <!-- 5. 記録モード (スマート・ボトムシート) -->
     <div id="bottom-sheet" class="fixed inset-x-0 bottom-0 bg-slate-900 border-t border-slate-700 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-50 transform translate-y-full transition-transform duration-300 flex flex-col h-[65vh]">
-        <div class="h-16 flex items-center justify-between px-6 border-b border-slate-700 bg-slate-800 rounded-t-3xl" onclick="UI.expandBottomSheet()">
-            <div class="flex flex-col">
+        <div class="flex items-center justify-between px-6 border-b border-slate-700 bg-slate-800 rounded-t-3xl" onclick="UI.expandBottomSheet()">
+            <div class="flex flex-col py-3">
                 <div class="w-10 h-1 bg-slate-500 rounded-full mb-1 mx-auto"></div>
                 <span id="current-tool-label" class="text-sm font-bold text-slate-300">モードを選択してください</span>
+                <div id="site-attributes" class="hidden text-xs text-slate-400 mt-1 max-h-16 overflow-y-auto"></div>
             </div>
             <button onclick="UI.closeBottomSheet(event)" class="px-4 py-2 bg-slate-700 rounded-lg text-sm font-bold active:bg-slate-600">保存して戻る</button>
         </div>
@@ -162,9 +164,28 @@
                 </button>
             </div>
 
-            <!-- オフライン地図設定 UI -->
+            <!-- 属性テーブル -->
             <div class="pt-2 border-t border-slate-700">
-                <h3 class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-wider">オフライン地図</h3>
+                <h3 class="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider">属性テーブル</h3>
+                <div id="attr-table-wrap" class="overflow-x-auto max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800">
+                    <table id="attr-table" class="w-full text-left text-xs border-collapse">
+                        <thead id="attr-table-head"></thead>
+                        <tbody id="attr-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- オフラインキャッシュ -->
+            <div class="pt-2 border-t border-slate-700">
+                <h3 class="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider">オフラインキャッシュ</h3>
+                <button id="btn-cache-tiles" onclick="TILES.cacheCurrentView()" class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-sm p-3 rounded-lg font-bold text-slate-300">
+                    現在の範囲をキャッシュ
+                </button>
+            </div>
+            <!-- レイヤー -->
+            <div class="pt-2 border-t border-slate-700">
+                <h3 class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-wider">レイヤー</h3>
+                <div id="layer-list" class="space-y-2 mb-3 max-h-40 overflow-y-auto"></div>
                 <label class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-sm p-3 rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors text-slate-300">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                     GeoTIFF / 画像をロード
@@ -218,12 +239,84 @@
 
     <!-- --- JavaScript ロジック --- -->
     <script>
+        const DEFAULT_BBOX = [138, 34, 140, 36];
+        const GSI_TILE_URL = 'https://cyberjapandata.gsi.go.jp/xyz/std/';
+
+        const TILES = {
+            saveToIDB: (key, img) => {
+                try {
+                    const c = document.createElement('canvas');
+                    c.width = img.width;
+                    c.height = img.height;
+                    c.getContext('2d').drawImage(img, 0, 0);
+                    c.toBlob((blob) => {
+                        const tx = DB.db.transaction('tileCache', 'readwrite');
+                        tx.objectStore('tileCache').put({ key, blob });
+                    });
+                } catch (e) { console.warn('tile save:', e); }
+            },
+            getFromIDB: (key) => {
+                return new Promise((resolve) => {
+                    try {
+                        const tx = DB.db.transaction('tileCache', 'readonly');
+                        const req = tx.objectStore('tileCache').get(key);
+                        req.onsuccess = () => {
+                            const r = req.result;
+                            if (!r || !r.blob) { resolve(null); return; }
+                            const url = URL.createObjectURL(r.blob);
+                            const img = new Image();
+                            img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+                            img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+                            img.src = url;
+                        };
+                        req.onerror = () => resolve(null);
+                    } catch (e) { resolve(null); }
+                });
+            },
+            cacheBbox: async (bbox, zoom) => {
+                const [w, s, e, n] = bbox;
+                const n2 = Math.pow(2, zoom);
+                const minTx = Math.max(0, MAP.lon2tileX(w, zoom));
+                const maxTx = Math.min(n2 - 1, MAP.lon2tileX(e, zoom));
+                const minTy = Math.max(0, MAP.lat2tileY(n, zoom));
+                const maxTy = Math.min(n2 - 1, MAP.lat2tileY(s, zoom));
+                let count = 0;
+                for (let ty = minTy; ty <= maxTy; ty++) {
+                    for (let tx = minTx; tx <= maxTx; tx++) {
+                        await MAP.fetchTile(zoom, tx, ty);
+                        count++;
+                    }
+                }
+                return count;
+            },
+            cacheCurrentView: async () => {
+                const bbox = MAP.getViewBbox();
+                const zoom = MAP.getBboxZoom(bbox);
+                const btn = document.getElementById('btn-cache-tiles');
+                if (btn) { btn.disabled = true; btn.textContent = 'キャッシュ中...'; }
+                try {
+                    const n = await TILES.cacheBbox(bbox, zoom);
+                    alert(`${n}枚のタイルをキャッシュしました。オフライン時にも表示されます。`);
+                } catch (e) {
+                    alert('キャッシュに失敗しました。');
+                }
+                if (btn) { btn.disabled = false; btn.textContent = '現在の範囲をキャッシュ'; }
+            }
+        };
+
         const STATE = {
             activeSiteId: null,
             currentSite: null, 
             mode: 'view', 
             brush: { val: 1, name: '伐採', color: '#ef4444' }, 
-            bgImage: null, 
+            bgImage: null,
+            baseMap: 'online',
+            tileCache: {},
+            layers: [],
+            polygonSites: [],
+            layersGeoTIFF: {},
+            gpsPosition: null,
+            gpsWatcherId: null,
             countersConf: [
                 { idx: 0, name: '伐採', step: 1, unit: '本' },
                 { idx: 1, name: '集材', step: 1, unit: '本' },
@@ -237,11 +330,14 @@
             db: null,
             init: () => {
                 return new Promise((resolve, reject) => {
-                    const req = indexedDB.open('ForestryScoutDB', 1);
+                    const req = indexedDB.open('ForestryScoutDB', 2);
                     req.onupgradeneeded = (e) => {
                         const db = e.target.result;
                         if (!db.objectStoreNames.contains('workSites')) {
                             db.createObjectStore('workSites', { keyPath: 'siteId' });
+                        }
+                        if (!db.objectStoreNames.contains('tileCache')) {
+                            db.createObjectStore('tileCache', { keyPath: 'key' });
                         }
                     };
                     req.onsuccess = (e) => {
@@ -274,6 +370,14 @@
                     req.onsuccess = () => resolve(req.result);
                 });
             },
+            deleteSite: (siteId) => {
+                return new Promise((resolve, reject) => {
+                    const tx = DB.db.transaction('workSites', 'readwrite');
+                    tx.objectStore('workSites').delete(siteId);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+            },
             loadDemoSite: async () => {
                 const demoId = 'demo-' + Date.now();
                 const lat = 35.0, lon = 138.0;
@@ -287,8 +391,36 @@
                     counters: [0, 0, 0, 0]
                 };
                 await DB.saveSite(newSite);
+                await LAYERS.syncFromSites();
                 await App.loadSite(demoId);
                 UI.toggleSideMenu(false);
+            }
+        };
+
+        // レイヤー管理（ポリゴン・GeoTIFF を表示/非表示・透過で管理）
+        const LAYERS = {
+            syncFromSites: async () => {
+                const sites = await DB.getAllSites();
+                STATE.polygonSites = sites;
+                const polygonLayer = STATE.layers.find(l => l.type === 'polygons') || { id: 'polygons-all', type: 'polygons', visible: true, opacity: 1, name: 'ポリゴン' };
+                STATE.layers = [
+                    polygonLayer,
+                    ...STATE.layers.filter(l => l.type === 'geotiff')
+                ];
+            },
+            addGeoTIFF: (image, name) => {
+                const id = 'geotiff-' + Date.now();
+                STATE.layersGeoTIFF[id] = image;
+                STATE.layers.push({ id, type: 'geotiff', visible: true, opacity: 0.9, name: name || 'GeoTIFF' });
+            },
+            setVisible: (id, visible) => {
+                const l = STATE.layers.find(x => x.id === id);
+                if (l) l.visible = visible;
+            },
+            setOpacity: (id, opacity) => {
+                const l = STATE.layers.find(x => x.id === id);
+                if (l) l.opacity = opacity;
+                UI.renderLayerList();
             }
         };
 
@@ -369,12 +501,24 @@
                     el.innerText = `⚠ 現場看板QRをスキャンしてください`;
                     el.classList.add('text-slate-400');
                 }
+                const attrEl = document.getElementById('site-attributes');
+                if (attrEl) {
+                    if (STATE.currentSite && STATE.currentSite.attributes && Object.keys(STATE.currentSite.attributes).length > 0) {
+                        attrEl.classList.remove('hidden');
+                        attrEl.innerHTML = Object.entries(STATE.currentSite.attributes)
+                            .map(([k, v]) => `<span class="mr-2">${k}: ${v != null ? String(v) : ''}</span>`).join('');
+                    } else {
+                        attrEl.classList.add('hidden');
+                        attrEl.innerHTML = '';
+                    }
+                }
             },
             toggleSideMenu: async (show) => {
                 const menu = document.getElementById('side-menu');
                 const bg = document.getElementById('side-menu-bg');
                 if (show) {
                     await UI.renderSideMenu();
+                    UI.renderLayerList();
                     menu.classList.remove('translate-x-full');
                     bg.classList.remove('hidden');
                 } else {
@@ -483,6 +627,59 @@
                         </div>
                     `;
                 });
+                await UI.renderAttributeTable();
+                UI.renderLayerList();
+            },
+            renderAttributeTable: async () => {
+                const headEl = document.getElementById('attr-table-head');
+                const bodyEl = document.getElementById('attr-table-body');
+                if (!headEl || !bodyEl) return;
+                const sites = await DB.getAllSites();
+                const baseCols = ['名前', 'ID'];
+                const attrKeys = new Set();
+                sites.forEach(s => {
+                    if (s.attributes && typeof s.attributes === 'object') {
+                        Object.keys(s.attributes).forEach(k => attrKeys.add(k));
+                    }
+                });
+                const cols = [...baseCols, ...Array.from(attrKeys).sort(), '操作'];
+                headEl.innerHTML = '<tr class="bg-slate-700 text-slate-300 sticky top-0">' + cols.map(c => `<th class="px-2 py-1.5 border-b border-slate-600 whitespace-nowrap">${c}</th>`).join('') + '</tr>';
+                bodyEl.innerHTML = sites.map(s => {
+                    const name = (s.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                    const id = (s.siteId || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                    const cells = [name, id];
+                    attrKeys.forEach(k => {
+                        const v = s.attributes && s.attributes[k];
+                        cells.push((v != null ? String(v) : '').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+                    });
+                    const sid = String(s.siteId).replace(/'/g, "\\'");
+                    cells.push(`<button type="button" onclick="App.deletePolygon('${sid}')" class="text-red-400 hover:text-red-300 text-xs font-bold">削除</button>`);
+                    return '<tr class="border-b border-slate-700 hover:bg-slate-700/50">' + cells.map((c, i) => `<td class="px-2 py-1 border-slate-600 whitespace-nowrap">${c}</td>`).join('') + '</tr>';
+                }).join('');
+            },
+            renderLayerList: () => {
+                const el = document.getElementById('layer-list');
+                if (!el) return;
+                el.innerHTML = STATE.layers.map((layer, idx) => {
+                    const name = (layer.name || (layer.type === 'polygons' ? 'ポリゴン' : 'GeoTIFF')).replace(/"/g, '&quot;');
+                    const opacity = Math.round((layer.opacity ?? 1) * 100);
+                    const id = String(layer.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    return `
+                        <div class="bg-slate-800 rounded-lg p-2 flex flex-col gap-1">
+                            <div class="flex items-center justify-between">
+                                <label class="flex items-center gap-2 cursor-pointer text-sm">
+                                    <input type="checkbox" ${layer.visible ? 'checked' : ''} onchange="LAYERS.setVisible('${id}', this.checked)">
+                                    <span class="truncate">${name}</span>
+                                </label>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs">
+                                <span class="text-slate-500">透過</span>
+                                <input type="range" min="0" max="100" value="${opacity}" class="flex-1" oninput="LAYERS.setOpacity('${id}', parseFloat(this.value)/100)">
+                                <span class="w-8 text-slate-400">${opacity}%</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
             }
         };
 
@@ -549,15 +746,81 @@
                 event.currentTarget.classList.add('border-blue-500', 'bg-blue-900/30');
             },
             
-            lon2x: (lon) => {
-                if(!STATE.currentSite) return 0;
-                const [w, s, e, n] = STATE.currentSite.bbox;
-                return ((lon - w) / (e - w)) * 800;
+            getViewBbox: () => STATE.currentSite ? STATE.currentSite.bbox : DEFAULT_BBOX,
+            lon2x: (lon, bbox) => {
+                const bb = bbox || MAP.getViewBbox();
+                const [w, s, e, n] = bb;
+                return ((lon - w) / (e - w || 1)) * 800;
             },
-            lat2y: (lat) => {
-                if(!STATE.currentSite) return 0;
-                const [w, s, e, n] = STATE.currentSite.bbox;
-                return ((n - lat) / (n - s)) * 800; 
+            lat2y: (lat, bbox) => {
+                const bb = bbox || MAP.getViewBbox();
+                const [w, s, e, n] = bb;
+                return ((n - lat) / (n - s || 1)) * 800; 
+            },
+            lon2tileX: (lon, z) => Math.floor((lon + 180) / 360 * Math.pow(2, z)),
+            lat2tileY: (lat, z) => {
+                const rad = lat * Math.PI / 180;
+                return Math.floor((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, z));
+            },
+            tileX2lon: (x, z) => x / Math.pow(2, z) * 360 - 180,
+            tileY2lat: (y, z) => 180 / Math.PI * (2 * Math.atan(Math.exp(Math.PI - 2 * Math.PI * y / Math.pow(2, z))) - Math.PI / 2),
+            getBboxZoom: (bbox) => {
+                const [w, s, e, n] = bbox;
+                const dy = n - s, dx = e - w;
+                const span = Math.max(dx, dy * 1.5);
+                if (span > 10) return 5;
+                if (span > 5) return 6;
+                if (span > 2) return 7;
+                if (span > 1) return 8;
+                if (span > 0.5) return 9;
+                if (span > 0.2) return 10;
+                if (span > 0.05) return 12;
+                if (span > 0.02) return 13;
+                if (span > 0.01) return 14;
+                return 15;
+            },
+            fetchTile: async (z, x, y) => {
+                const key = `${z}/${x}/${y}`;
+                if (STATE.tileCache[key]) return STATE.tileCache[key];
+                const cached = await TILES.getFromIDB(key);
+                if (cached) { STATE.tileCache[key] = cached; return cached; }
+                if (!navigator.onLine) return null;
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => {
+                        STATE.tileCache[key] = img;
+                        TILES.saveToIDB(key, img);
+                        resolve(img);
+                    };
+                    img.onerror = () => resolve(null);
+                    img.src = GSI_TILE_URL + `${z}/${x}/${y}.png`;
+                });
+            },
+            drawBaseMap: (ctx, bbox, zoom) => {
+                const [w, s, e, n] = bbox;
+                const n2 = Math.pow(2, zoom);
+                const minTx = Math.max(0, MAP.lon2tileX(w, zoom));
+                const maxTx = Math.min(n2 - 1, MAP.lon2tileX(e, zoom));
+                const minTy = Math.max(0, MAP.lat2tileY(n, zoom));
+                const maxTy = Math.min(n2 - 1, MAP.lat2tileY(s, zoom));
+                for (let ty = minTy; ty <= maxTy; ty++) {
+                    for (let tx = minTx; tx <= maxTx; tx++) {
+                        const key = `${zoom}/${tx}/${ty}`;
+                        const img = STATE.tileCache[key];
+                        if (img) {
+                            const tLonW = MAP.tileX2lon(tx, zoom), tLonE = MAP.tileX2lon(tx + 1, zoom);
+                            const tLatN = MAP.tileY2lat(ty, zoom), tLatS = MAP.tileY2lat(ty + 1, zoom);
+                            const lx = ((tLonW - w) / (e - w || 1)) * 800;
+                            const rx = ((tLonE - w) / (e - w || 1)) * 800;
+                            const ty_ = ((n - tLatN) / (n - s || 1)) * 800;
+                            const by = ((n - tLatS) / (n - s || 1)) * 800;
+                            ctx.drawImage(img, lx, ty_, rx - lx, by - ty_);
+                        } else {
+                            MAP.fetchTile(zoom, tx, ty);
+                        }
+                    }
+                }
             },
 
             setupTouch: () => {
@@ -662,22 +925,14 @@
             loadBackground: async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-
-                if (!STATE.currentSite) {
-                    alert("先に現場（ポリゴン）をロードして選択してください。");
-                    e.target.value = "";
-                    return;
-                }
-
                 UI.toggleSideMenu(false);
                 alert("地図を読み込んでいます...");
-
                 try {
                     if (file.type === 'image/jpeg' || file.type === 'image/png') {
                         const url = URL.createObjectURL(file);
                         const img = new Image();
                         img.onload = () => { 
-                            STATE.bgImage = img; 
+                            LAYERS.addGeoTIFF(img, file.name);
                             alert("地図の読み込みが完了しました。");
                         };
                         img.onerror = () => alert("画像の読み込みに失敗しました。");
@@ -688,28 +943,24 @@
                         const image = await tiff.getImage();
                         const width = image.getWidth();
                         const height = image.getHeight();
-                        
                         const rasters = await image.readRasters();
-                        
                         const offscreen = document.createElement('canvas');
                         offscreen.width = width;
                         offscreen.height = height;
                         const ctx = offscreen.getContext('2d');
                         const imgData = ctx.createImageData(width, height);
-                        
                         let r, g, b;
                         for (let i = 0; i < width * height; i++) {
                             r = rasters[0][i];
                             g = rasters.length > 1 ? rasters[1][i] : r;
                             b = rasters.length > 2 ? rasters[2][i] : r;
-                            
                             imgData.data[i * 4] = r;
                             imgData.data[i * 4 + 1] = g;
                             imgData.data[i * 4 + 2] = b;
                             imgData.data[i * 4 + 3] = 255; 
                         }
                         ctx.putImageData(imgData, 0, 0);
-                        STATE.bgImage = offscreen;
+                        LAYERS.addGeoTIFF(offscreen, file.name);
                         alert("地図の読み込みが完了しました。");
                     } else {
                         alert("対応していないファイル形式です。");
@@ -718,7 +969,6 @@
                     console.error(err);
                     alert("地図画像の読み込みに失敗しました。ファイル形式を確認してください。");
                 }
-                
                 e.target.value = "";
             },
 
@@ -741,44 +991,51 @@
 
             loop: () => {
                 MAP.ctx.clearRect(0, 0, MAP.canvas.width, MAP.canvas.height);
-                
                 MAP.ctx.fillStyle = '#0f172a'; 
-                MAP.ctx.fillRect(0,0, MAP.canvas.width, MAP.canvas.height);
+                MAP.ctx.fillRect(0, 0, MAP.canvas.width, MAP.canvas.height);
 
-                if (STATE.currentSite) {
-                    MAP.ctx.save();
-                    MAP.ctx.translate(MAP.transform.x, MAP.transform.y);
-                    MAP.ctx.scale(MAP.transform.scale, MAP.transform.scale);
+                const viewBbox = MAP.getViewBbox();
+                MAP.ctx.save();
+                MAP.ctx.translate(MAP.transform.x, MAP.transform.y);
+                MAP.ctx.scale(MAP.transform.scale, MAP.transform.scale);
 
-                    if (STATE.bgImage) {
-                        const aspect = STATE.bgImage.width / STATE.bgImage.height;
-                        let drawW = 800, drawH = 800; 
-                        let offsetX = 0, offsetY = 0;
+                if (STATE.baseMap === 'online') {
+                    const zoom = MAP.getBboxZoom(viewBbox);
+                    MAP.drawBaseMap(MAP.ctx, viewBbox, zoom);
+                }
 
-                        if (aspect > 1) { 
-                            drawH = 800 / aspect;
-                            offsetY = (800 - drawH) / 2;
-                        } else { 
-                            drawW = 800 * aspect;
-                            offsetX = (800 - drawW) / 2;
-                        }
-                        MAP.ctx.drawImage(STATE.bgImage, offsetX, offsetY, drawW, drawH);
+                STATE.layers.filter(l => l.visible).forEach(layer => {
+                    MAP.ctx.globalAlpha = layer.opacity ?? 1;
+                    if (layer.type === 'polygons' && STATE.polygonSites && STATE.polygonSites.length > 0) {
+                        STATE.polygonSites.forEach(site => {
+                            if (!site.polygon || !site.polygon.length) return;
+                            MAP.ctx.beginPath();
+                            site.polygon.forEach((p, i) => {
+                                const x = MAP.lon2x(p[0], viewBbox);
+                                const y = MAP.lat2y(p[1], viewBbox);
+                                if (i === 0) MAP.ctx.moveTo(x, y);
+                                else MAP.ctx.lineTo(x, y);
+                            });
+                            MAP.ctx.closePath();
+                            MAP.ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                            MAP.ctx.fill();
+                            MAP.ctx.lineWidth = 2;
+                            MAP.ctx.strokeStyle = site.siteId === STATE.activeSiteId ? '#ef4444' : '#64748b';
+                            MAP.ctx.stroke();
+                        });
+                    } else if (layer.type === 'geotiff' && STATE.layersGeoTIFF[layer.id]) {
+                        const img = STATE.layersGeoTIFF[layer.id];
+                        const aspect = img.width / img.height;
+                        let drawW = 800, drawH = 800, offsetX = 0, offsetY = 0;
+                        if (aspect > 1) { drawH = 800 / aspect; offsetY = (800 - drawH) / 2; }
+                        else { drawW = 800 * aspect; offsetX = (800 - drawW) / 2; }
+                        MAP.ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
                     }
+                    MAP.ctx.globalAlpha = 1;
+                });
 
-                    MAP.ctx.beginPath();
-                    STATE.currentSite.polygon.forEach((p, i) => {
-                        const x = MAP.lon2x(p[0]);
-                        const y = MAP.lat2y(p[1]);
-                        if (i === 0) MAP.ctx.moveTo(x, y);
-                        else MAP.ctx.lineTo(x, y);
-                    });
-                    MAP.ctx.closePath();
-                    MAP.ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-                    MAP.ctx.fill();
-                    MAP.ctx.lineWidth = 2;
-                    MAP.ctx.strokeStyle = '#ef4444'; 
-                    MAP.ctx.stroke();
-
+                // ペイント・カウンターは「現在選択中の現場」にのみ紐づく（レイヤー表示と独立）
+                if (STATE.currentSite) {
                     MAP.ctx.globalAlpha = 0.6;
                     for (let r = 0; r < 40; r++) {
                         for (let c = 0; c < 40; c++) {
@@ -799,8 +1056,35 @@
                     MAP.ctx.strokeStyle = 'rgba(255,255,255,0.1)';
                     MAP.ctx.lineWidth = 1;
                     MAP.ctx.strokeRect(0, 0, 800, 800);
+                }
 
-                    MAP.ctx.restore();
+                if (STATE.gpsPosition) {
+                    const [lon, lat] = [STATE.gpsPosition.longitude, STATE.gpsPosition.latitude];
+                    const lx = MAP.lon2x(lon, viewBbox);
+                    const ly = MAP.lat2y(lat, viewBbox);
+                    if (lx >= 0 && lx <= 800 && ly >= 0 && ly <= 800) {
+                        MAP.ctx.fillStyle = '#2563eb';
+                        MAP.ctx.strokeStyle = '#fff';
+                        MAP.ctx.lineWidth = 2;
+                        MAP.ctx.beginPath();
+                        MAP.ctx.arc(lx, ly, 8, 0, Math.PI * 2);
+                        MAP.ctx.fill();
+                        MAP.ctx.stroke();
+                    }
+                }
+
+                MAP.ctx.restore();
+
+                if (STATE.gpsPosition && STATE.currentSite) {
+                    const [w, s, e, n] = STATE.currentSite.bbox;
+                    const lon = STATE.gpsPosition.longitude, lat = STATE.gpsPosition.latitude;
+                    if (lon < w || lon > e || lat < s || lat > n) {
+                        const alertEl = document.getElementById('gps-range-alert');
+                        if (alertEl) alertEl.classList.remove('hidden');
+                    } else {
+                        const alertEl = document.getElementById('gps-range-alert');
+                        if (alertEl) alertEl.classList.add('hidden');
+                    }
                 }
 
                 if(STATE.mode === 'view') {
@@ -817,9 +1101,18 @@
             },
             
             centerOnGPS: () => {
-                if(!STATE.currentSite) return;
-                MAP.transform.x = MAP.canvas.width / 2 - 400 * MAP.transform.scale;
-                MAP.transform.y = MAP.canvas.height / 2 - 400 * MAP.transform.scale;
+                if (STATE.gpsPosition) {
+                    const viewBbox = MAP.getViewBbox();
+                    const [w, s, e, n] = viewBbox;
+                    const lon = STATE.gpsPosition.longitude, lat = STATE.gpsPosition.latitude;
+                    const lx = MAP.lon2x(lon, viewBbox);
+                    const ly = MAP.lat2y(lat, viewBbox);
+                    MAP.transform.x = MAP.canvas.width / 2 - lx * MAP.transform.scale;
+                    MAP.transform.y = MAP.canvas.height / 2 - ly * MAP.transform.scale;
+                } else if (STATE.currentSite) {
+                    MAP.transform.x = MAP.canvas.width / 2 - 400 * MAP.transform.scale;
+                    MAP.transform.y = MAP.canvas.height / 2 - 400 * MAP.transform.scale;
+                }
             }
         };
 
@@ -1115,10 +1408,21 @@
                 if(sites.length > 0) {
                     sites.sort((a,b) => b.lastUpdated - a.lastUpdated);
                     await App.loadSite(sites[0].siteId);
+                } else {
+                    MAP.transform.x = window.innerWidth / 2 - 400;
+                    MAP.transform.y = window.innerHeight / 2 - 400;
+                    MAP.transform.scale = 1;
                 }
-                
+                await LAYERS.syncFromSites();
                 UI.init();
                 MAP.init();
+                if (navigator.geolocation) {
+                    STATE.gpsWatcherId = navigator.geolocation.watchPosition(
+                        (p) => { STATE.gpsPosition = p.coords; },
+                        () => {},
+                        { enableHighAccuracy: true, maximumAge: 10000 }
+                    );
+                }
             },
             loadSite: async (siteId) => {
                 const site = await DB.getSite(siteId);
@@ -1133,6 +1437,24 @@
                     UI.renderCounters();
                     UI.toggleSideMenu(false);
                 }
+            },
+            deletePolygon: async (siteId) => {
+                if (!confirm('このポリゴン（現場）を削除しますか？')) return;
+                await DB.deleteSite(siteId);
+                if (STATE.currentSite && STATE.currentSite.siteId === siteId) {
+                    const rest = await DB.getAllSites();
+                    if (rest.length > 0) {
+                        await App.loadSite(rest[0].siteId);
+                    } else {
+                        STATE.currentSite = null;
+                        STATE.activeSiteId = null;
+                        UI.updateHeader();
+                        UI.renderCounters();
+                    }
+                }
+                await LAYERS.syncFromSites();
+                await UI.renderSideMenu();
+                UI.updateHeader();
             },
             handleNewSiteQR: async (jsonStr) => {
                 try {
@@ -1175,9 +1497,53 @@
                         }
                     }
 
-                    const isSiteQR = siteId && Array.isArray(poly);
                     const isResultQR = data && data.id && Array.isArray(data.c) && typeof data.p === 'string';
 
+                    // 直接QR化: FeatureCollection の全 feature をそれぞれ現場として登録（属性も保持）
+                    if (data.geom && Array.isArray(data.geom.features) && data.geom.features.length > 0) {
+                        const baseName = data.name || 'layer';
+                        const savedIds = [];
+                        const ts = Date.now();
+                        for (let i = 0; i < data.geom.features.length; i++) {
+                            const f = data.geom.features[i];
+                            const g = f.geometry;
+                            let featPoly = null;
+                            if (g && g.type === 'Polygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates[0];
+                            else if (g && g.type === 'MultiPolygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates[0][0];
+                            else if (g && g.type === 'LineString' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates.concat([g.coordinates[0]]);
+                            if (!featPoly || featPoly.length < 3) continue;
+                            let minLon=180, maxLon=-180, minLat=90, maxLat=-90;
+                            featPoly.forEach(p => {
+                                if(p[0] < minLon) minLon = p[0];
+                                if(p[0] > maxLon) maxLon = p[0];
+                                if(p[1] < minLat) minLat = p[1];
+                                if(p[1] > maxLat) maxLat = p[1];
+                            });
+                            const props = f.properties || {};
+                            const featName = props.name || props.名称 || props.名前 || props.Name || (baseName + ' ' + (i + 1));
+                            const featId = (f.id != null ? String(f.id) : null) || props.id || ('import-' + ts + '-' + i);
+                            const attrs = {};
+                            Object.keys(props).forEach(k => { if (k !== 'geometry' && k !== 'style') attrs[k] = props[k]; });
+                            const newSite = {
+                                siteId: featId,
+                                name: featName,
+                                polygon: featPoly,
+                                bbox: [minLon, minLat, maxLon, maxLat],
+                                paintData: Array(1600).fill(0),
+                                counters: [0, 0, 0, 0],
+                                attributes: Object.keys(attrs).length > 0 ? attrs : undefined
+                            };
+                            await DB.saveSite(newSite);
+                            savedIds.push(featId);
+                        }
+                        if (savedIds.length > 0) {
+                            await LAYERS.syncFromSites();
+                            await App.loadSite(savedIds[0]);
+                            await UI.renderSideMenu();
+                            alert(savedIds.length + '件の現場を読み込みました。');
+                        }
+                    } else {
+                    const isSiteQR = siteId && Array.isArray(poly);
                     if (isSiteQR) {
                         let minLon=180, maxLon=-180, minLat=90, maxLat=-90;
                         poly.forEach(p => {
@@ -1196,6 +1562,7 @@
                             counters: [0, 0, 0, 0]
                         };
                         await DB.saveSite(newSite);
+                        await LAYERS.syncFromSites();
                         await App.loadSite(siteId);
                         await UI.renderSideMenu();
                         alert(`新しい現場「${newSite.name}」を読み込みました。`);
@@ -1221,6 +1588,7 @@
                         alert("作業実績QRを取り込み、現在の現場にマージしました。");
                     } else {
                         alert("対応していないQRフォーマットです");
+                    }
                     }
                 } catch(e) {
                     console.error(e);
