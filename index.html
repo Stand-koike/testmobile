@@ -54,6 +54,9 @@
 
     <!-- 2. ヘッダー -->
     <div id="gps-range-alert" class="hidden fixed top-14 left-0 right-0 z-50 bg-amber-600/90 text-white text-center py-1 text-sm font-bold">範囲外</div>
+    <div id="offline-indicator" class="hidden fixed bottom-24 left-4 z-50 bg-slate-700/90 text-slate-200 px-3 py-2 rounded-lg text-xs font-bold shadow-lg">
+        オフライン（キャッシュ表示）
+    </div>
     <header id="app-header" class="fixed top-0 inset-x-0 h-14 bg-slate-900/80 backdrop-blur-md border-b border-slate-700 flex items-center justify-between px-4 z-40 transition-transform">
         <div class="flex items-center gap-2 overflow-hidden" onclick="UI.toggleSideMenu(true)">
             <!-- 現場アイコン -->
@@ -127,7 +130,7 @@
 
     <!-- 6. サイドメニュー (ダッシュボード) -->
     <div id="side-menu-bg" onclick="UI.toggleSideMenu(false)" class="fixed inset-0 bg-black/50 z-50 hidden backdrop-blur-sm"></div>
-    <div id="side-menu" class="fixed inset-y-0 right-0 w-80 max-w-[85vw] bg-slate-900 border-l border-slate-700 z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
+    <div id="side-menu" class="fixed inset-y-0 right-0 w-36 max-w-[42vw] bg-slate-900 border-l border-slate-700 z-50 transform translate-x-full transition-transform duration-300 flex flex-col">
         <div class="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
             <h2 class="font-bold text-lg">現場ダッシュボード</h2>
             <button onclick="UI.toggleSideMenu(false)" class="p-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -156,8 +159,8 @@
                     <button onclick="SYNC.openMergeScanner()" class="bg-blue-600 hover:bg-blue-500 p-3 rounded-lg font-bold flex justify-center items-center gap-2">
                         仲間と同期 (マージ)
                     </button>
-                    <button onclick="SYNC.showExportQR()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg font-bold flex justify-center items-center gap-2">
-                        PCへ提出 (QR生成)
+                    <button onclick="SYNC.showExportQR()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg font-bold flex justify-center items-center gap-2 text-sm">
+                        作業実績QR
                     </button>
                 </div>
             </div>
@@ -167,10 +170,7 @@
                 <div id="site-list" class="flex flex-col gap-2">
                     <!-- 動的に生成 -->
                 </div>
-                <button onclick="DB.loadDemoSite()" class="mt-3 w-full border border-dashed border-slate-600 text-slate-400 p-3 rounded-lg font-bold hover:bg-slate-800 transition-colors">
-                    + デモ現場をロード
-                </button>
-            </div>
+                </div>
 
             <!-- 属性テーブル -->
             <div class="pt-2 border-t border-slate-700">
@@ -184,14 +184,8 @@
                 </div>
             </div>
 
-            <!-- ズーム・オフラインキャッシュ -->
+            <!-- オフラインキャッシュ -->
             <div class="pt-2 border-t border-slate-700">
-                <h3 class="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider">地図ズーム</h3>
-                <div class="flex items-center gap-2 mb-2">
-                    <button onclick="MAP.setZoomDelta(-1)" class="flex-1 bg-slate-800 border border-slate-600 hover:bg-slate-700 text-sm py-2 rounded-lg font-bold">－</button>
-                    <span class="text-xs text-slate-400 w-12 text-center">Z<span id="zoom-level">14</span></span>
-                    <button onclick="MAP.setZoomDelta(1)" class="flex-1 bg-slate-800 border border-slate-600 hover:bg-slate-700 text-sm py-2 rounded-lg font-bold">＋</button>
-                </div>
                 <h3 class="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider">オフラインキャッシュ</h3>
                 <button id="btn-cache-tiles" onclick="TILES.cacheCurrentView()" class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-sm p-3 rounded-lg font-bold text-slate-300">
                     現在の範囲をキャッシュ
@@ -241,7 +235,7 @@
             <div id="qr-display" class="hidden bg-white p-6 rounded-xl w-full max-w-sm flex flex-col items-center justify-center">
                 <!-- 実際のQRコードが描画されるコンテナ -->
                 <div id="qr-canvas-container" class="flex justify-center items-center bg-white p-2 rounded-lg"></div>
-                <p class="mt-4 text-sm text-slate-600 font-bold">PCのカメラで読み取ってください</p>
+                <p class="mt-4 text-sm text-slate-600 font-bold">PC・仲間のモバイルで読み取ってください</p>
                 <!-- バックアップ用テキスト -->
                 <div class="mt-2 w-full h-16 overflow-y-auto bg-slate-100 p-2 rounded cursor-text" style="user-select: text; -webkit-user-select: text;">
                     <p class="font-mono text-[10px] break-all text-slate-800" id="qr-export-text"></p>
@@ -355,10 +349,10 @@
             viewScale: 1,
             viewPan: { x: 0, y: 0 },
             countersConf: [
-                { idx: 0, name: '伐採', step: 1, unit: '本' },
-                { idx: 1, name: '集材', step: 1, unit: '本' },
-                { idx: 2, name: '造材', step: 1, unit: '本' },
-                { idx: 3, name: '運材', step: 1, unit: '台' }
+                { idx: 0, name: '伐採', step: 5, unit: '本' },
+                { idx: 1, name: '集材', step: 5, unit: '本' },
+                { idx: 2, name: '造材', step: 5, unit: '㎥' },
+                { idx: 3, name: '運材', step: 5, unit: '㎥' }
             ]
         };
 
@@ -447,6 +441,15 @@
                     req.onsuccess = () => resolve(req.result || []);
                 });
             },
+            deleteGeoTIFF: (id) => {
+                return new Promise((resolve, reject) => {
+                    if (!DB.db.objectStoreNames.contains('geotiffLayers')) { resolve(); return; }
+                    const tx = DB.db.transaction('geotiffLayers', 'readwrite');
+                    tx.objectStore('geotiffLayers').delete(id);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+            },
             deleteSite: (siteId) => {
                 return new Promise((resolve, reject) => {
                     const tx = DB.db.transaction('workSites', 'readwrite');
@@ -455,24 +458,7 @@
                     tx.onerror = () => reject(tx.error);
                 });
             },
-            loadDemoSite: async () => {
-                const demoId = 'demo-' + Date.now();
-                const lat = 35.0, lon = 138.0;
-                const d = 0.002;
-                const newSite = {
-                    siteId: demoId,
-                    name: '林小班 デモエリア',
-                    polygon: [[lon, lat], [lon+d, lat], [lon+d, lat+d], [lon, lat+d]],
-                    bbox: [lon, lat, lon+d, lat+d], 
-                    paintData: Array(1600).fill(0), 
-                    counters: [0, 0, 0, 0]
-                };
-                await DB.saveSite(newSite);
-                await LAYERS.syncFromSites();
-                await App.loadSite(demoId);
-                UI.toggleSideMenu(false);
-            }
-        };
+            };
 
         // レイヤー管理（ポリゴン・GeoTIFF を表示/非表示・透過で管理）
         const LAYERS = {
@@ -520,6 +506,14 @@
                 c.toBlob((blob) => {
                     if (blob) DB.saveGeoTIFF(id, blob, gb, name || 'GeoTIFF');
                 }, 'image/png');
+            },
+            removeGeoTIFF: async (id) => {
+                if (!confirm('このGeoTIFFレイヤーを削除しますか？')) return;
+                STATE.layers = STATE.layers.filter(l => l.id !== id);
+                delete STATE.layersGeoTIFF[id];
+                await DB.deleteGeoTIFF(id);
+                await LAYERS.saveConfig();
+                UI.renderLayerList();
             },
             loadGeoTIFFs: async () => {
                 const stored = await DB.getAllGeoTIFFs();
@@ -619,6 +613,10 @@
             init: () => {
                 UI.renderCounters();
                 UI.updateHeader();
+            },
+            updateOnlineStatus: () => {
+                const el = document.getElementById('offline-indicator');
+                if (el) el.classList.toggle('hidden', navigator.onLine);
             },
             updateHeader: () => {
                 const el = document.getElementById('header-site-name');
@@ -795,17 +793,20 @@
                 const headEl = document.getElementById('attr-table-head');
                 const bodyEl = document.getElementById('attr-table-body');
                 if (!headEl || !bodyEl) return;
-                const sites = await DB.getAllSites();
+                const allSites = await DB.getAllSites();
+                const sites = allSites;
                 const baseCols = ['名前', 'ID'];
                 const attrKeys = new Set();
-                sites.forEach(s => {
+                allSites.forEach(s => {
                     if (s.attributes && typeof s.attributes === 'object') {
                         Object.keys(s.attributes).forEach(k => attrKeys.add(k));
                     }
                 });
                 const cols = [...baseCols, ...Array.from(attrKeys).sort(), '操作'];
                 headEl.innerHTML = '<tr class="bg-slate-700 text-slate-300 sticky top-0">' + cols.map(c => `<th class="px-2 py-1.5 border-b border-slate-600 whitespace-nowrap">${c}</th>`).join('') + '</tr>';
-                bodyEl.innerHTML = sites.map(s => {
+                bodyEl.innerHTML = sites.length === 0
+                    ? `<tr><td colspan="${cols.length}" class="px-2 py-4 text-center text-slate-500">ポリゴンがありません</td></tr>`
+                    : sites.map(s => {
                     const name = (s.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                     const id = (s.siteId || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
                     const cells = [name, id];
@@ -826,13 +827,15 @@
                     const name = (layer.name || (layer.type === 'polygons' ? 'ポリゴン' : 'GeoTIFF')).replace(/"/g, '&quot;');
                     const opacity = Math.round((layer.opacity ?? 1) * 100);
                     const id = String(layer.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    const delBtn = layer.type === 'geotiff' ? `<button type="button" onclick="event.stopPropagation(); LAYERS.removeGeoTIFF('${id}')" class="text-red-400 hover:text-red-300 text-xs font-bold shrink-0">削除</button>` : '';
                     return `
                         <div class="bg-slate-800 rounded-lg p-2 flex flex-col gap-1">
                             <div class="flex items-center justify-between">
-                                <label class="flex items-center gap-2 cursor-pointer text-sm">
+                                <label class="flex items-center gap-2 cursor-pointer text-sm flex-1 min-w-0">
                                     <input type="checkbox" ${layer.visible ? 'checked' : ''} onchange="LAYERS.setVisible('${id}', this.checked)">
                                     <span class="truncate">${name}</span>
                                 </label>
+                                ${delBtn}
                             </div>
                             <div class="flex items-center gap-2 text-xs">
                                 <span class="text-slate-500">透過</span>
@@ -1314,16 +1317,6 @@
                     }
                 }
 
-                if(STATE.mode === 'view') {
-                    MAP.ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-                    MAP.ctx.beginPath();
-                    MAP.ctx.moveTo(MAP.canvas.width/2 - 10, MAP.canvas.height/2);
-                    MAP.ctx.lineTo(MAP.canvas.width/2 + 10, MAP.canvas.height/2);
-                    MAP.ctx.moveTo(MAP.canvas.width/2, MAP.canvas.height/2 - 10);
-                    MAP.ctx.lineTo(MAP.canvas.width/2, MAP.canvas.height/2 + 10);
-                    MAP.ctx.stroke();
-                }
-
                 requestAnimationFrame(MAP.loop);
             },
             
@@ -1395,14 +1388,7 @@
                             DB.saveSite(STATE.currentSite);
                             UI.renderCounters();
                             UI.renderSideMenu();
-                            QR.mergeCount = (QR.mergeCount || 0) + 1;
-                            const mstat = document.getElementById('qr-merge-status');
-                            if (mstat) {
-                                mstat.classList.remove('hidden');
-                                mstat.textContent = `✓ マージ済み ${QR.mergeCount} 人。次の仲間のQRをスキャンするか、×で終了`;
-                            }
                             if(navigator.vibrate) navigator.vibrate([30, 50, 30]);
-                            return false;
                         } else if (isSitePayload) {
                             alert("このQRコードは新しい現場登録用です。ヘッダーのメッセージか右上のカメラボタンから読み込んでください。");
                         } else {
@@ -1412,7 +1398,7 @@
                         alert("QRの解析に失敗しました。");
                         console.error(e);
                     }
-                }, { mergeMode: true });
+                });
             },
             showExportQR: () => {
                 if(!STATE.currentSite) return alert("現場を選択してください");
@@ -1422,7 +1408,7 @@
                     p: RLE.encode(STATE.currentSite.paintData)
                 };
                 const jsonStr = JSON.stringify(payload);
-                document.getElementById('qr-modal-title').innerText = "PC提出用 QR";
+                document.getElementById('qr-modal-title').innerText = "作業実績QR";
                 document.getElementById('qr-modal').classList.remove('hidden');
                 document.getElementById('qr-display').classList.remove('hidden');
                 document.getElementById('qr-reader').classList.add('hidden');
@@ -1686,15 +1672,27 @@
                     sites.sort((a,b) => b.lastUpdated - a.lastUpdated);
                     await App.loadSite(sites[0].siteId);
                 } else {
-                    STATE.viewCenter = { lon: 139.7, lat: 35.7 };
-                    STATE.viewZoom = 14;
+                    const viewCfg = await DB.getConfig('viewState');
+                    if (viewCfg?.center && viewCfg?.zoom != null) {
+                        STATE.viewCenter = viewCfg.center;
+                        STATE.viewZoom = viewCfg.zoom;
+                    } else {
+                        STATE.viewCenter = { lon: 139.7, lat: 35.7 };
+                        STATE.viewZoom = 14;
+                    }
                     STATE.viewScale = 1;
                     STATE.viewPan = { x: 0, y: 0 };
                 }
                 await LAYERS.loadGeoTIFFs();
                 await LAYERS.syncFromSites();
                 UI.init();
+                UI.updateOnlineStatus();
+                window.addEventListener('online', UI.updateOnlineStatus);
+                window.addEventListener('offline', UI.updateOnlineStatus);
                 MAP.init();
+                window.addEventListener('beforeunload', () => {
+                    DB.setConfig('viewState', { center: STATE.viewCenter, zoom: STATE.viewZoom });
+                });
                 if (navigator.geolocation) {
                     STATE.gpsWatcherId = navigator.geolocation.watchPosition(
                         (p) => { STATE.gpsPosition = p.coords; },
@@ -1714,6 +1712,7 @@
                         STATE.viewZoom = MAP.getBboxZoom(site.bbox);
                         STATE.viewScale = 1;
                         STATE.viewPan = { x: 0, y: 0 };
+                        DB.setConfig('viewState', { center: STATE.viewCenter, zoom: STATE.viewZoom });
                     }
                     UI.updateHeader();
                     UI.renderCounters();
