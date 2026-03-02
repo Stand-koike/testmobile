@@ -94,9 +94,8 @@
             <div class="flex flex-col py-3">
                 <div class="w-10 h-1 bg-slate-500 rounded-full mb-1 mx-auto"></div>
                 <span id="current-tool-label" class="text-sm font-bold text-slate-300">モードを選択してください</span>
-                <div id="site-attributes" class="hidden text-xs text-slate-400 mt-1 max-h-16 overflow-y-auto"></div>
             </div>
-            <button onclick="UI.closeBottomSheet(event)" class="px-4 py-2 bg-slate-700 rounded-lg text-sm font-bold active:bg-slate-600">保存して戻る</button>
+            <button onclick="UI.closeBottomSheet(event)" class="px-4 py-2 bg-slate-700 rounded-full text-sm font-bold active:bg-slate-600">保存して戻る</button>
         </div>
 
         <div class="flex border-b border-slate-800 shrink-0">
@@ -136,54 +135,39 @@
             <button onclick="UI.toggleSideMenu(false)" class="p-2"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
         </div>
         
-        <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
-            <!-- サマリー (カウンターの数値のみ) -->
-            <div class="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                <h3 class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-wider">アクティブ現場実績</h3>
-                <div id="summary-content" class="text-sm">データがありません</div>
+        <div class="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+            <!-- 実績 -->
+            <div class="bg-slate-800 rounded-lg px-3 py-2 border border-slate-700">
+                <h3 class="text-[10px] text-slate-500 font-bold mb-2 uppercase tracking-wider">実績</h3>
+                <div id="summary-content" class="text-xs">データがありません</div>
             </div>
 
-            <!-- 選択中ポリゴンのプロパティ -->
-            <div id="selected-properties-wrap" class="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                <h3 class="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider">プロパティ</h3>
-                <div id="selected-properties" class="text-xs text-slate-300 space-y-1 max-h-32 overflow-y-auto">
-                    <p class="text-slate-500">ポリゴンを選択してください</p>
+            <!-- Sync Hub -->
+            <div class="bg-blue-900/30 rounded-lg px-3 py-2 border border-blue-800">
+                <h3 class="text-[10px] text-blue-400 font-bold mb-2 uppercase tracking-wider">Sync</h3>
+                <div class="flex gap-2">
+                    <button onclick="SYNC.openMergeScanner()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2 rounded-lg text-xs font-bold">仲間と同期</button>
+                    <button onclick="SYNC.showExportQR()" class="flex-1 bg-slate-700 hover:bg-slate-600 py-2 rounded-lg text-xs font-bold">QR提出</button>
                 </div>
             </div>
 
-            <div class="bg-blue-900/30 rounded-xl p-4 border border-blue-800">
-                <h3 class="text-xs text-blue-400 font-bold mb-3 uppercase tracking-wider flex items-center gap-1">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Sync Hub
-                </h3>
-                <div class="flex flex-col gap-2">
-                    <button onclick="SYNC.openMergeScanner()" class="bg-blue-600 hover:bg-blue-500 p-3 rounded-lg font-bold flex justify-center items-center gap-2">
-                        仲間と同期 (マージ)
-                    </button>
-                    <button onclick="SYNC.showExportQR()" class="bg-slate-700 hover:bg-slate-600 p-3 rounded-lg font-bold flex justify-center items-center gap-2 text-sm">
-                        作業実績QR
-                    </button>
-                </div>
-            </div>
-
+            <!-- 現場リスト -->
             <div>
-                <h3 class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-wider">現場リスト</h3>
-                <div id="site-list" class="flex flex-col gap-2">
+                <h3 class="text-[10px] text-slate-500 font-bold mb-1 uppercase tracking-wider">現場リスト</h3>
+                <div id="site-list" class="flex flex-col gap-1">
                     <!-- 動的に生成 -->
                 </div>
-                </div>
+            </div>
 
             <!-- オフラインキャッシュ -->
-            <div class="pt-2 border-t border-slate-700">
-                <h3 class="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider">オフラインキャッシュ</h3>
-                <button id="btn-cache-tiles" onclick="TILES.cacheCurrentView()" class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-sm p-3 rounded-lg font-bold text-slate-300">
-                    現在の範囲をキャッシュ
-                </button>
+            <div class="border-t border-slate-700 pt-2">
+                <button id="btn-cache-tiles" onclick="TILES.cacheCurrentView()" class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-xs py-2 rounded-lg font-bold text-slate-300">範囲キャッシュ</button>
             </div>
             <!-- レイヤー -->
-            <div class="pt-2 border-t border-slate-700">
-                <h3 class="text-xs text-slate-400 font-bold mb-3 uppercase tracking-wider">レイヤー</h3>
-                <div id="layer-list" class="space-y-2 mb-3 max-h-40 overflow-y-auto"></div>
-                <label class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-sm p-3 rounded-lg font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors text-slate-300">
+            <div class="border-t border-slate-700 pt-2">
+                <h3 class="text-[10px] text-slate-500 font-bold mb-1 uppercase tracking-wider">レイヤー</h3>
+                <div id="layer-list" class="space-y-1 mb-2 max-h-24 overflow-y-auto text-xs"></div>
+                <label class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-xs py-2 rounded-lg font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors text-slate-300">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                     GeoTIFF / 画像をロード
                     <input type="file" accept=".tif,.tiff,.jpg,.png" class="hidden" onchange="MAP.loadBackground(event)">
@@ -630,17 +614,6 @@
                     el.innerText = `⚠ 現場看板QRをスキャンしてください`;
                     el.classList.add('text-slate-400');
                 }
-                const attrEl = document.getElementById('site-attributes');
-                if (attrEl) {
-                    if (STATE.currentSite && STATE.currentSite.attributes && Object.keys(STATE.currentSite.attributes).length > 0) {
-                        attrEl.classList.remove('hidden');
-                        attrEl.innerHTML = Object.entries(STATE.currentSite.attributes)
-                            .map(([k, v]) => `<span class="mr-2">${k}: ${v != null ? String(v) : ''}</span>`).join('');
-                    } else {
-                        attrEl.classList.add('hidden');
-                        attrEl.innerHTML = '';
-                    }
-                }
             },
             toggleSideMenu: async (show) => {
                 const menu = document.getElementById('side-menu');
@@ -767,57 +740,19 @@
                     UI.closePolygonModal();
                 }
             },
-            renderSelectedProperties: () => {
-                const el = document.getElementById('selected-properties');
-                if (!el) return;
-                if (!STATE.currentSite) {
-                    el.innerHTML = '<p class="text-slate-500">ポリゴンを選択してください</p>';
-                    return;
-                }
-                const s = STATE.currentSite;
-                const rows = [
-                    ['名前', s.name || '-'],
-                    ['ID', s.siteId || '-']
-                ];
-                if (s.attributes && typeof s.attributes === 'object') {
-                    Object.entries(s.attributes).forEach(([k, v]) => {
-                        rows.push([k, v != null ? String(v) : '']);
-                    });
-                }
-                if (s.bbox && s.bbox.length >= 4) {
-                    const [w, bboxS, e, n] = s.bbox;
-                    rows.push(['範囲', `${w.toFixed(5)}, ${bboxS.toFixed(5)} ～ ${e.toFixed(5)}, ${n.toFixed(5)}`]);
-                }
-                el.innerHTML = rows.map(([k, v]) => {
-                    const kEsc = String(k).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    const vEsc = String(v).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    return `<div class="flex gap-2"><span class="text-slate-500 shrink-0">${kEsc}:</span><span class="break-all">${vEsc || '-'}</span></div>`;
-                }).join('');
-            },
             renderSideMenu: async () => {
                 UI.updateZoomDisplay();
-                UI.renderSelectedProperties();
                 const summaryEl = document.getElementById('summary-content');
                 if (STATE.currentSite) {
                     const c = STATE.currentSite.counters;
+                    const conf = STATE.countersConf || [];
+                    const u = i => (conf[i] && conf[i].unit) || (i < 2 ? '本' : '㎥');
                     summaryEl.innerHTML = `
-                        <div class="grid grid-cols-2 gap-3 text-slate-300">
-                            <div class="bg-slate-700/40 p-3 rounded-lg flex flex-col items-center">
-                                <span class="text-xs text-slate-400">🌲伐採</span>
-                                <div><span class="font-bold text-xl text-white">${c[0]}</span> <span class="text-xs">本</span></div>
-                            </div>
-                            <div class="bg-slate-700/40 p-3 rounded-lg flex flex-col items-center">
-                                <span class="text-xs text-slate-400">🚜集材</span>
-                                <div><span class="font-bold text-xl text-white">${c[1]}</span> <span class="text-xs">本</span></div>
-                            </div>
-                            <div class="bg-slate-700/40 p-3 rounded-lg flex flex-col items-center">
-                                <span class="text-xs text-slate-400">🪚造材</span>
-                                <div><span class="font-bold text-xl text-white">${c[2]}</span> <span class="text-xs">本</span></div>
-                            </div>
-                            <div class="bg-slate-700/40 p-3 rounded-lg flex flex-col items-center">
-                                <span class="text-xs text-slate-400">🚚運材</span>
-                                <div><span class="font-bold text-xl text-white">${c[3]}</span> <span class="text-xs">台</span></div>
-                            </div>
+                        <div class="grid grid-cols-2 gap-2 text-slate-300 text-xs">
+                            <div class="flex justify-between"><span class="text-slate-500">伐採</span><span class="font-bold">${c[0]} ${u(0)}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">集材</span><span class="font-bold">${c[1]} ${u(1)}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">造材</span><span class="font-bold">${c[2]} ${u(2)}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">運材</span><span class="font-bold">${c[3]} ${u(3)}</span></div>
                         </div>
                     `;
                 } else {
@@ -829,14 +764,11 @@
                 listEl.innerHTML = '';
                 sites.sort((a,b) => b.lastUpdated - a.lastUpdated).forEach(s => {
                     const isActive = s.siteId === STATE.activeSiteId;
-                    const dateStr = new Date(s.lastUpdated).toLocaleDateString('ja-JP', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+                    const dateStr = new Date(s.lastUpdated).toLocaleDateString('ja-JP', {month:'short', day:'numeric'});
                     listEl.innerHTML += `
-                        <div onclick="App.loadSite('${s.siteId}')" class="p-3 rounded-lg border cursor-pointer transition-colors ${isActive ? 'bg-blue-900/50 border-blue-500' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'}">
-                            <div class="font-bold flex items-center justify-between">
-                                <span class="truncate">${s.name}</span>
-                                ${isActive ? '<span class="flex w-2 h-2 shrink-0 rounded-full bg-blue-500 ml-2"></span>' : ''}
-                            </div>
-                            <div class="text-xs text-slate-500 mt-1">最終更新: ${dateStr}</div>
+                        <div onclick="App.loadSite('${s.siteId}')" class="px-2 py-1.5 rounded border cursor-pointer text-xs transition-colors ${isActive ? 'bg-blue-900/50 border-blue-500' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'}">
+                            <span class="font-bold truncate block">${String(s.name || s.siteId).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}</span>
+                            <span class="text-slate-500 text-[10px]">${dateStr}</span>
                         </div>
                     `;
                 });
@@ -851,9 +783,9 @@
                     const id = String(layer.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                     const delBtn = layer.type === 'geotiff' ? `<button type="button" onclick="event.stopPropagation(); LAYERS.removeGeoTIFF('${id}')" class="text-red-400 hover:text-red-300 text-xs font-bold shrink-0">削除</button>` : '';
                     return `
-                        <div class="bg-slate-800 rounded-lg p-2 flex flex-col gap-1">
+                        <div class="bg-slate-800 rounded px-2 py-1 flex flex-col gap-0.5">
                             <div class="flex items-center justify-between">
-                                <label class="flex items-center gap-2 cursor-pointer text-sm flex-1 min-w-0">
+                                <label class="flex items-center gap-1 cursor-pointer text-xs flex-1 min-w-0">
                                     <input type="checkbox" ${layer.visible ? 'checked' : ''} onchange="LAYERS.setVisible('${id}', this.checked)">
                                     <span class="truncate">${name}</span>
                                 </label>
