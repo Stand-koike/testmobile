@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>林業GIS Pro (Forestry Scout)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- GeoTIFF解析とQRコード生成ライブラリ -->
-    <script src="https://cdn.jsdelivr.net/npm/geotiff"></script>
+    <!-- GeoTIFF は .tif 読み込み時にのみ遅延ロード（軽量化） -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
     <!-- QRコード読取(jsQR) -->
@@ -161,7 +160,7 @@
 
             <!-- オフラインキャッシュ -->
             <div class="border-t border-slate-700 pt-2">
-                <button id="btn-cache-tiles" onclick="TILES.cacheCurrentView()" class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-xs py-2 rounded-lg font-bold text-slate-300">範囲キャッシュ</button>
+                <button id="btn-cache-tiles" onclick="TILES.cacheCurrentView()" class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-xs py-2 rounded-lg font-bold text-slate-300">現在の範囲をキャッシュ</button>
             </div>
             <!-- レイヤー -->
             <div class="border-t border-slate-700 pt-2">
@@ -325,6 +324,8 @@
             bgImage: null,
             baseMap: 'online',
             tileCache: {},
+            tileCacheKeys: [],
+            TILE_CACHE_MAX: 500,
             layers: [],
             polygonSites: [],
             layersGeoTIFF: {},
@@ -938,13 +939,26 @@
                 const key = `${z}/${x}/${y}`;
                 if (STATE.tileCache[key]) return STATE.tileCache[key];
                 const cached = await TILES.getFromIDB(key);
-                if (cached) { STATE.tileCache[key] = cached; return cached; }
+                if (cached) {
+                    STATE.tileCache[key] = cached;
+                    STATE.tileCacheKeys.push(key);
+                    if (STATE.tileCacheKeys.length > STATE.TILE_CACHE_MAX) {
+                        const old = STATE.tileCacheKeys.shift();
+                        delete STATE.tileCache[old];
+                    }
+                    return cached;
+                }
                 if (!navigator.onLine) return null;
                 return new Promise((resolve) => {
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
                     img.onload = () => {
                         STATE.tileCache[key] = img;
+                        STATE.tileCacheKeys.push(key);
+                        if (STATE.tileCacheKeys.length > STATE.TILE_CACHE_MAX) {
+                            const old = STATE.tileCacheKeys.shift();
+                            delete STATE.tileCache[old];
+                        }
                         TILES.saveToIDB(key, img);
                         resolve(img);
                     };
@@ -1113,16 +1127,15 @@
                 UI.toggleSideMenu(false);
                 alert("地図を読み込んでいます...");
                 try {
-                    if (file.type === 'image/jpeg' || file.type === 'image/png') {
-                        const url = URL.createObjectURL(file);
-                        const img = new Image();
-                        img.onload = () => { 
-                            LAYERS.addGeoTIFF(img, file.name, MAP.getViewBbox());
-                            alert("地図の読み込みが完了しました。");
-                        };
-                        img.onerror = () => alert("画像の読み込みに失敗しました。");
-                        img.src = url;
-                    } else if (file.name.endsWith('.tif') || file.name.endsWith('.tiff')) {
+                    if (file.name.endsWith('.tif') || file.name.endsWith('.tiff')) {
+                        if (typeof GeoTIFF === 'undefined') {
+                            await new Promise((res, rej) => {
+                                const s = document.createElement('script');
+                                s.src = 'https://cdn.jsdelivr.net/npm/geotiff';
+                                s.onload = res; s.onerror = rej;
+                                document.head.appendChild(s);
+                            });
+                        }
                         const arrayBuffer = await file.arrayBuffer();
                         const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
                         const image = await tiff.getImage();
@@ -1142,13 +1155,22 @@
                             imgData.data[i * 4] = r;
                             imgData.data[i * 4 + 1] = g;
                             imgData.data[i * 4 + 2] = b;
-                            imgData.data[i * 4 + 3] = 255; 
+                            imgData.data[i * 4 + 3] = 255;
                         }
                         ctx.putImageData(imgData, 0, 0);
                         const bbox = image.getBoundingBox ? image.getBoundingBox() : null;
                         const geoBbox = bbox && bbox.length >= 4 ? [bbox[0], bbox[1], bbox[2], bbox[3]] : MAP.getViewBbox();
                         LAYERS.addGeoTIFF(offscreen, file.name, geoBbox);
                         alert("地図の読み込みが完了しました。");
+                    } else if (file.type === 'image/jpeg' || file.type === 'image/png') {
+                        const url = URL.createObjectURL(file);
+                        const img = new Image();
+                        img.onload = () => { 
+                            LAYERS.addGeoTIFF(img, file.name, MAP.getViewBbox());
+                            alert("地図の読み込みが完了しました。");
+                        };
+                        img.onerror = () => alert("画像の読み込みに失敗しました。");
+                        img.src = url;
                     } else {
                         alert("対応していないファイル形式です。");
                     }
@@ -1259,6 +1281,10 @@
                 }
 
 
+                if (document.hidden) {
+                    requestAnimationFrame(MAP.loop);
+                    return;
+                }
                 if (STATE.gpsPosition && STATE.currentSite) {
                     const [w, s, e, n] = STATE.currentSite.bbox;
                     const lon = STATE.gpsPosition.longitude, lat = STATE.gpsPosition.latitude;
