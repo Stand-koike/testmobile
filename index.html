@@ -60,7 +60,7 @@
         <div class="flex items-center gap-2 overflow-hidden" onclick="UI.toggleSideMenu(true)">
             <!-- 現場アイコン -->
             <svg class="w-5 h-5 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-            <span id="header-site-name" class="font-bold text-sm truncate">⚠ 現場看板QRをスキャンしてください</span>
+            <span id="header-site-name" class="font-bold text-sm truncate">⚠ QRをスキャンして現場を登録</span>
         </div>
     </header>
 
@@ -610,7 +610,7 @@
                     el.innerText = `📍 ${STATE.currentSite.name}`;
                     el.classList.remove('text-slate-400');
                 } else {
-                    el.innerText = `⚠ 現場看板QRをスキャンしてください`;
+                    el.innerText = `⚠ QRをスキャンして現場を登録`;
                     el.classList.add('text-slate-400');
                 }
             },
@@ -1425,38 +1425,6 @@
             }
         };
 
-        // 現場看板の分割QR（F1/4|...）を順に集めて結合する用
-        let signboardChunkState = { total: 0, chunks: {} };
-        let lastSignboardKey = '';
-        let lastSignboardTime = 0;
-        function handleSignboardChunk(text) {
-            const m = text.match(/^F(\d+)\/(\d+)\|([\s\S]*)$/);
-            if (!m) return false;
-            const idx = parseInt(m[1], 10), total = parseInt(m[2], 10), content = m[3];
-            const key = 'F' + idx + '/' + total;
-            if (Date.now() - lastSignboardTime < 1500 && lastSignboardKey === key) return true;
-            if (signboardChunkState.total !== total) signboardChunkState = { total, chunks: {} };
-            signboardChunkState.chunks[idx] = content;
-            lastSignboardKey = key;
-            lastSignboardTime = Date.now();
-            const keys = Object.keys(signboardChunkState.chunks);
-            if (keys.length === total) {
-                let full = '';
-                for (let i = 1; i <= total; i++) full += (signboardChunkState.chunks[i] || '');
-                signboardChunkState = { total: 0, chunks: {} };
-                lastSignboardKey = '';
-                lastSignboardTime = 0;
-                QR.close();
-                App.handleNewSiteQR(full);
-            } else {
-                const next = [1,2,3,4,5,6].slice(0, total).find(j => !signboardChunkState.chunks[j]);
-                const labels = ['①','②','③','④','⑤','⑥'];
-                const el = document.getElementById('qr-chunk-progress');
-                if (el) { el.classList.remove('hidden'); el.textContent = keys.length + "/" + total + " 枚読み取りました。次は " + (labels[next-1] || next) + " をスキャン"; }
-            }
-            return true;
-        }
-
         // 選択地物を直接QR化（1/3|...）のチャンクを集めてLZ復号し現場登録
         let directChunkState = { total: 0, chunks: {} };
         let lastChunkKey = '';
@@ -1511,10 +1479,7 @@
             callback: null,
             scanning: false,
             startScan: (callback = null, options = {}) => {
-                signboardChunkState = { total: 0, chunks: {} };
                 directChunkState = { total: 0, chunks: {} };
-                lastSignboardKey = '';
-                lastSignboardTime = 0;
                 lastChunkKey = '';
                 lastChunkTime = 0;
                 QR.mergeMode = options.mergeMode || false;
@@ -1610,10 +1575,6 @@
                 event.target.value = "";
             },
             handleResult: (decodedText) => {
-                if (/^F\d+\/\d+\|/.test(decodedText)) {
-                    handleSignboardChunk(decodedText);
-                    return;
-                }
                 if (/^\d+\/\d+\|/.test(decodedText)) {
                     handleDirectQRChunk(decodedText);
                     return;
@@ -1730,7 +1691,7 @@
                     if (!raw) { alert("QRの内容が空です"); return; }
                     const data = JSON.parse(raw);
 
-                    // --- 1) 現場看板QR (PC → モバイル)
+                    // --- PC直接QR化 (PC → モバイル)
                     // 超コンパクト: { i, n?, b: \"wwwwwweeeeee\" }  (base36で bbox をエンコード)
                     // 標準: { id, name?, poly: [[lon,lat]...] }
                     // 旧: { type:\"checkin\", id, name, geom: GeoJSON FeatureCollection }
@@ -1764,7 +1725,7 @@
                             poly = g.coordinates.concat([g.coordinates[0]]);
                         }
                     }
-                    // 現場看板などで2点だけ渡されると線になるため、矩形(5点)に補正
+                    // 2点だけ渡されると線になるため、矩形(5点)に補正
                     if (Array.isArray(poly) && poly.length === 2) {
                         const w = Math.min(poly[0][0], poly[1][0]);
                         const e = Math.max(poly[0][0], poly[1][0]);
@@ -1787,7 +1748,15 @@
                             if (g && g.type === 'Polygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates[0];
                             else if (g && g.type === 'MultiPolygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates[0][0];
                             else if (g && g.type === 'LineString' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates.concat([g.coordinates[0]]);
-                            if (!featPoly || featPoly.length < 3) continue;
+                            if (!featPoly || featPoly.length < 2) continue;
+                            if (featPoly.length === 2) {
+                                const w = Math.min(featPoly[0][0], featPoly[1][0]), e = Math.max(featPoly[0][0], featPoly[1][0]);
+                                const s = Math.min(featPoly[0][1], featPoly[1][1]), n = Math.max(featPoly[0][1], featPoly[1][1]);
+                                featPoly = [[w, s], [e, s], [e, n], [w, n], [w, s]];
+                            }
+                            if (featPoly.length >= 3 && (featPoly[0][0] !== featPoly[featPoly.length - 1][0] || featPoly[0][1] !== featPoly[featPoly.length - 1][1])) {
+                                featPoly = featPoly.concat([featPoly[0]]);
+                            }
                             let minLon=180, maxLon=-180, minLat=90, maxLat=-90;
                             featPoly.forEach(p => {
                                 if(p[0] < minLon) minLon = p[0];
@@ -1843,7 +1812,7 @@
                         await UI.renderSideMenu();
                         alert(`新しい現場「${newSite.name}」を読み込みました。`);
                     } else if (isResultQR) {
-                        // PC提出用 / 仲間とのマージ用QRを誤って「現場看板QR」として読んだ場合の扱い
+                        // PC提出用 / 仲間とのマージ用QRを誤って読んだ場合の扱い
                         if (!STATE.currentSite || STATE.activeSiteId !== data.id) {
                             alert("このQRコードは作業実績（マージ／PC提出）用です。現場を選択し、Sync Hub の「仲間と同期」から読み込んでください。");
                             return;
@@ -1868,7 +1837,7 @@
                     }
                 } catch(e) {
                     console.error(e);
-                    alert("QRの解析に失敗しました。\n（現場看板QRまたは作業実績QRかご確認ください）");
+                    alert("QRの解析に失敗しました。\n（直接QR化データまたは作業実績QRかご確認ください）");
                 }
             }
         };
