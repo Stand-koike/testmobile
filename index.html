@@ -208,7 +208,7 @@
                     <video id="qr-video" class="w-full h-full" autoplay muted playsinline></video>
                     <div class="qr-frame"></div>
                 </div>
-                <div id="qr-chunk-progress" class="hidden mt-2 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 text-sm font-bold"></div>
+                <div id="qr-chunk-progress" class="hidden mt-2 px-3 py-2 rounded-lg bg-amber-100 text-amber-900 text-sm font-bold leading-5 border border-amber-300"></div>
                 <div id="qr-merge-status" class="hidden mt-2 px-3 py-2 rounded-lg bg-green-100 text-green-800 text-sm font-bold"></div>
                 <div class="p-3 space-y-2 text-xs text-slate-700">
                     <p class="font-bold">カメラQRスキャン</p>
@@ -1470,24 +1470,45 @@
         let lastChunkKey = '';
         let lastChunkTime = 0;
         const CHUNK_COOLDOWN_MS = 1500;
+        function updateChunkProgressUI(idx, total, isDuplicate = false, isComplete = false) {
+            const el = document.getElementById('qr-chunk-progress');
+            if (!el) return;
+            const labels = ['①','②','③','④','⑤','⑥','⑦','⑧'];
+            const readIdx = Object.keys(directChunkState.chunks).map(v => parseInt(v, 10)).filter(v => !isNaN(v)).sort((a, b) => a - b);
+            const readLabel = readIdx.map(i => labels[i - 1] || String(i)).join(' ');
+            const next = Array.from({ length: total }, (_, i) => i + 1).find(j => !directChunkState.chunks[j]);
+            el.classList.remove('hidden');
+            if (isComplete) {
+                el.className = 'mt-2 px-3 py-2 rounded-lg bg-emerald-100 text-emerald-900 text-sm font-bold leading-5 border border-emerald-300';
+                el.innerHTML = `受信完了 <b>${readIdx.length}/${total}</b><br>復号しています...`;
+                return;
+            }
+            el.className = 'mt-2 px-3 py-2 rounded-lg bg-amber-100 text-amber-900 text-sm font-bold leading-5 border border-amber-300';
+            const dup = isDuplicate ? '（同じQRを検出）' : '';
+            const nextLabel = next ? (labels[next - 1] || String(next)) : '-';
+            const nowLabel = labels[idx - 1] || String(idx);
+            el.innerHTML = `読み取り: <b>${readIdx.length}/${total}</b> ${dup}<br>今回: ${nowLabel} / 次: ${nextLabel}<br>受信済み: ${readLabel || '-'}`;
+        }
         async function handleDirectQRChunk(text) {
             const m = text.match(/^(\d+)\/(\d+)\|([\s\S]*)$/);
             if (!m) return false;
             const idx = parseInt(m[1], 10), total = parseInt(m[2], 10), content = m[3];
             const key = idx + '/' + total;
-            if (Date.now() - lastChunkTime < CHUNK_COOLDOWN_MS && lastChunkKey === key) return true;
+            if (Date.now() - lastChunkTime < CHUNK_COOLDOWN_MS && lastChunkKey === key) {
+                updateChunkProgressUI(idx, total, true, false);
+                return true;
+            }
             if (directChunkState.total !== total) directChunkState = { total, chunks: {} };
             directChunkState.chunks[idx] = content;
+            if (navigator.vibrate) navigator.vibrate(30);
             lastChunkKey = key;
             lastChunkTime = Date.now();
             const keys = Object.keys(directChunkState.chunks);
             if (keys.length !== total) {
-                const next = [1,2,3,4,5,6,7,8].slice(0, total).find(j => !directChunkState.chunks[j]);
-                const labels = ['①','②','③','④','⑤','⑥'];
-                const el = document.getElementById('qr-chunk-progress');
-                if (el) { el.classList.remove('hidden'); el.textContent = keys.length + "/" + total + " 枚読み取りました。次は " + (labels[next-1] || next) + " をスキャン"; }
+                updateChunkProgressUI(idx, total, false, false);
                 return true;
             }
+            updateChunkProgressUI(idx, total, false, true);
             let full = '';
             for (let i = 1; i <= total; i++) full += (directChunkState.chunks[i] || '');
             directChunkState = { total: 0, chunks: {} };
