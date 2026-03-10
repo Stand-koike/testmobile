@@ -465,8 +465,11 @@
                 STATE.polygonSites = sites;
                 const saved = await DB.getConfig('mapLayers');
                 const savedPoly = saved?.layers?.find(l => l.type === 'polygons');
+                // 現場が存在するのにポリゴンが非表示の設定が残っていると「登録されているのに見えない」ため、
+                // 現場が1件以上ある場合は表示ONを優先する。
+                const polyVisible = (sites && sites.length > 0) ? true : (savedPoly?.visible ?? true);
                 const polygonLayer = {
-                    id: 'polygons-all', type: 'polygons', visible: savedPoly?.visible ?? true,
+                    id: 'polygons-all', type: 'polygons', visible: polyVisible,
                     opacity: savedPoly?.opacity ?? 1, name: 'ポリゴン'
                 };
                 const geotiffLayers = STATE.layers.filter(l => l.type === 'geotiff');
