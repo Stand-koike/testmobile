@@ -162,6 +162,10 @@
             <div class="border-t border-slate-700 pt-2">
                 <button id="btn-cache-tiles" onclick="TILES.cacheCurrentView()" class="w-full bg-slate-800 border border-slate-600 hover:bg-slate-700 text-xs py-2 rounded-lg font-bold text-slate-300">現在の範囲をキャッシュ</button>
             </div>
+            <!-- データリセット -->
+            <div class="border-t border-slate-700 pt-2">
+                <button onclick="if(confirm('全データ（現場・設定・キャッシュ）を削除して初期化します。よろしいですか？')) DB.resetAll()" class="w-full bg-red-900/50 border border-red-800 hover:bg-red-800/50 text-xs py-2 rounded-lg font-bold text-red-200">データをリセット</button>
+            </div>
             <!-- レイヤー -->
             <div class="border-t border-slate-700 pt-2">
                 <h3 class="text-[10px] text-slate-500 font-bold mb-1 uppercase tracking-wider">レイヤー</h3>
@@ -444,6 +448,14 @@
                     tx.onerror = () => reject(tx.error);
                 });
             },
+            resetAll: () => {
+                return new Promise((resolve, reject) => {
+                    if (DB.db) { DB.db.close(); DB.db = null; }
+                    const req = indexedDB.deleteDatabase('ForestryScoutDB');
+                    req.onsuccess = () => { location.reload(); resolve(); };
+                    req.onerror = () => reject(req.error);
+                });
+            }
             };
 
         // レイヤー管理（ポリゴン・GeoTIFF を表示/非表示・透過で管理）
@@ -1211,24 +1223,38 @@
                     MAP.ctx.globalAlpha = layer.opacity ?? 1;
                     if (layer.type === 'polygons' && STATE.polygonSites && STATE.polygonSites.length > 0) {
                         STATE.polygonSites.forEach(site => {
-                            if (!site.polygon || !site.polygon.length) return;
-                            let pts = site.polygon;
-                            if (pts.length === 2) {
-                                const w = Math.min(pts[0][0], pts[1][0]), e = Math.max(pts[0][0], pts[1][0]);
-                                const s = Math.min(pts[0][1], pts[1][1]), n = Math.max(pts[0][1], pts[1][1]);
-                                pts = [[w, s], [e, s], [e, n], [w, n], [w, s]];
+                            let pts;
+                            let raw = site.polygon;
+                            if (!raw && site.geometry && site.geometry.coordinates) {
+                                const c = site.geometry.coordinates;
+                                raw = (site.geometry.type === 'Polygon' && c[0]) ? c[0] : (site.geometry.type === 'MultiPolygon' && c[0] && c[0][0]) ? c[0][0] : null;
                             }
+                            if (raw && raw.length >= 2) {
+                                if (Array.isArray(raw[0]) && raw[0].length >= 2 && Array.isArray(raw[0][0])) raw = raw[0];
+                                pts = raw.map(p => [parseFloat(p[0]), parseFloat(p[1])]).filter(p => !isNaN(p[0]) && !isNaN(p[1]));
+                                if (pts.length === 2) {
+                                    const w = Math.min(pts[0][0], pts[1][0]), e = Math.max(pts[0][0], pts[1][0]);
+                                    const s = Math.min(pts[0][1], pts[1][1]), n = Math.max(pts[0][1], pts[1][1]);
+                                    pts = [[w, s], [e, s], [e, n], [w, n], [w, s]];
+                                }
+                            }
+                            if ((!pts || pts.length < 2) && site.bbox && site.bbox.length >= 4) {
+                                const [w, s, e, n] = site.bbox.map(v => parseFloat(v));
+                                if (!isNaN(w) && !isNaN(s) && !isNaN(e) && !isNaN(n)) pts = [[w, s], [e, s], [e, n], [w, n], [w, s]];
+                            }
+                            if (!pts || pts.length < 2) return;
                             MAP.ctx.beginPath();
                             pts.forEach((p, i) => {
-                                const pt = MAP.lonLatToScreen(p[0], p[1]);
+                                const lon = p[0], lat = p[1];
+                                const pt = MAP.lonLatToScreen(lon, lat);
                                 if (i === 0) MAP.ctx.moveTo(pt.x, pt.y);
                                 else MAP.ctx.lineTo(pt.x, pt.y);
                             });
                             MAP.ctx.closePath();
-                            MAP.ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                            MAP.ctx.fillStyle = site.siteId === STATE.activeSiteId ? 'rgba(34, 197, 94, 0.25)' : 'rgba(34, 197, 94, 0.15)';
                             MAP.ctx.fill();
-                            MAP.ctx.lineWidth = 2;
-                            MAP.ctx.strokeStyle = site.siteId === STATE.activeSiteId ? '#ef4444' : '#64748b';
+                            MAP.ctx.lineWidth = 2.5;
+                            MAP.ctx.strokeStyle = site.siteId === STATE.activeSiteId ? '#22c55e' : '#475569';
                             MAP.ctx.stroke();
                         });
                     } else if (layer.type === 'geotiff' && STATE.layersGeoTIFF[layer.id]) {
@@ -1315,12 +1341,26 @@
                 }
                 return inside;
             },
+            getSitePolygon: (site) => {
+                let raw = site.polygon;
+                if (!raw && site.geometry && site.geometry.coordinates) {
+                    const c = site.geometry.coordinates;
+                    raw = (site.geometry.type === 'Polygon' && c[0]) ? c[0] : (site.geometry.type === 'MultiPolygon' && c[0] && c[0][0]) ? c[0][0] : null;
+                }
+                if (raw && raw.length >= 2) return raw;
+                if (site.bbox && site.bbox.length >= 4) {
+                    const [w, s, e, n] = site.bbox;
+                    return [[w, s], [e, s], [e, n], [w, n], [w, s]];
+                }
+                return null;
+            },
             tapSelectPolygon: (screenX, screenY) => {
                 const ll = MAP.screenToLonLat(screenX, screenY);
                 if (!STATE.polygonSites || STATE.polygonSites.length === 0) return;
                 for (let i = STATE.polygonSites.length - 1; i >= 0; i--) {
                     const site = STATE.polygonSites[i];
-                    if (site.polygon && MAP.pointInPolygon(ll.lon, ll.lat, site.polygon)) {
+                    const poly = MAP.getSitePolygon(site);
+                    if (poly && MAP.pointInPolygon(ll.lon, ll.lat, poly)) {
                         UI.showPolygonModal(site);
                         break;
                     }
@@ -1457,8 +1497,11 @@
                 let raw = (typeof LZString !== 'undefined' && LZString.decompressFromEncodedURIComponent)
                     ? LZString.decompressFromEncodedURIComponent(full)
                     : null;
-                if (!raw) raw = full;
-                const parsed = JSON.parse(raw || '{}');
+                if (!raw) {
+                    alert("データの復号に失敗しました。QRコードを最初から順に読み直してください。");
+                    return true;
+                }
+                const parsed = JSON.parse(raw);
                 QR.close();
                 if (parsed.type === 'featureCollection' && parsed.geom) {
                     parsed.id = parsed.id || 'import-' + Date.now();
@@ -1737,7 +1780,9 @@
                     const isResultQR = data && data.id && Array.isArray(data.c) && typeof data.p === 'string';
 
                     // 直接QR化: FeatureCollection の全 feature をそれぞれ現場として登録（属性も保持）
-                    if (data.geom && Array.isArray(data.geom.features) && data.geom.features.length > 0) {
+                    const hasFeatureCollection = (data.type === 'featureCollection' || (data.geom && data.geom.features)) &&
+                        data.geom && Array.isArray(data.geom.features) && data.geom.features.length > 0;
+                    if (hasFeatureCollection) {
                         const baseName = data.name || 'layer';
                         const savedIds = [];
                         const ts = Date.now();
@@ -1745,10 +1790,27 @@
                             const f = data.geom.features[i];
                             const g = f.geometry;
                             let featPoly = null;
-                            if (g && g.type === 'Polygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates[0];
-                            else if (g && g.type === 'MultiPolygon' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates[0][0];
-                            else if (g && g.type === 'LineString' && Array.isArray(g.coordinates) && g.coordinates.length > 0) featPoly = g.coordinates.concat([g.coordinates[0]]);
+                            if (g && Array.isArray(g.coordinates)) {
+                                if (g.type === 'Polygon' && g.coordinates.length > 0) featPoly = g.coordinates[0];
+                                else if (g.type === 'MultiPolygon' && g.coordinates.length > 0 && g.coordinates[0].length > 0) featPoly = g.coordinates[0][0];
+                                else if (g.type === 'LineString' && g.coordinates.length > 0) featPoly = g.coordinates.concat([g.coordinates[0]]);
+                            }
+                            if (!featPoly || !Array.isArray(featPoly) || featPoly.length < 2) {
+                                const ex = (f.properties && f.properties.bbox) || f.bbox;
+                                if (Array.isArray(ex) && ex.length >= 4) {
+                                    const [w, s, e, n] = ex.map(v => parseFloat(v));
+                                    if (!isNaN(w) && !isNaN(s) && !isNaN(e) && !isNaN(n)) featPoly = [[w, s], [e, s], [e, n], [w, n], [w, s]];
+                                }
+                            }
                             if (!featPoly || featPoly.length < 2) continue;
+                            featPoly = featPoly.map(p => [parseFloat(p[0]), parseFloat(p[1])]).filter(p => !isNaN(p[0]) && !isNaN(p[1]));
+                            if (featPoly.length < 2) {
+                                if (featPoly.length === 1) {
+                                    const eps = 0.0001;
+                                    const x = featPoly[0][0], y = featPoly[0][1];
+                                    featPoly = [[x - eps, y - eps], [x + eps, y - eps], [x + eps, y + eps], [x - eps, y + eps], [x - eps, y - eps]];
+                                } else continue;
+                            }
                             if (featPoly.length === 2) {
                                 const w = Math.min(featPoly[0][0], featPoly[1][0]), e = Math.max(featPoly[0][0], featPoly[1][0]);
                                 const s = Math.min(featPoly[0][1], featPoly[1][1]), n = Math.max(featPoly[0][1], featPoly[1][1]);
@@ -1786,6 +1848,8 @@
                             await App.loadSite(savedIds[0]);
                             await UI.renderSideMenu();
                             alert(savedIds.length + '件の現場を読み込みました。');
+                        } else {
+                            alert("有効な地物がありませんでした。座標データを確認してください。");
                         }
                     } else {
                     const isSiteQR = siteId && Array.isArray(poly);
