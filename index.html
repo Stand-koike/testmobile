@@ -1443,10 +1443,8 @@
                     p: RLE.encode(STATE.currentSite.paintData)
                 };
                 const jsonStr = JSON.stringify(payload);
-                const compressed = (typeof LZString !== 'undefined' && LZString.compressToEncodedURIComponent)
-                    ? LZString.compressToEncodedURIComponent(jsonStr)
-                    : null;
-                const qrText = compressed ? `m|${compressed}` : jsonStr;
+                // PC側の既存取込との互換性を優先し、作業実績QRは常にJSON文字列で出力する
+                const qrText = jsonStr;
                 document.getElementById('qr-modal-title').innerText = "作業実績QR";
                 document.getElementById('qr-modal').classList.remove('hidden');
                 document.getElementById('qr-display').classList.remove('hidden');
