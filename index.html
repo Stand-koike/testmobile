@@ -103,19 +103,19 @@
         </div>
 
         <div id="tab-paint" class="p-4 grid grid-cols-2 gap-3 overflow-y-auto pb-8">
-            <button onclick="MAP.setBrush(1, '伐採', '#ef4444')" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
+            <button onclick="MAP.setBrush(1, '伐採', '#ef4444', event)" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
                 <div class="w-8 h-8 rounded-full bg-red-500/80 border border-red-400"></div><span class="font-bold">伐採 (1)</span>
             </button>
-            <button onclick="MAP.setBrush(2, '集材', '#3b82f6')" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
+            <button onclick="MAP.setBrush(2, '集材', '#3b82f6', event)" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
                 <div class="w-8 h-8 rounded-full bg-blue-500/80 border border-blue-400"></div><span class="font-bold">集材 (2)</span>
             </button>
-            <button onclick="MAP.setBrush(3, '造材', '#eab308')" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
+            <button onclick="MAP.setBrush(3, '造材', '#eab308', event)" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
                 <div class="w-8 h-8 rounded-full bg-yellow-500/80 border border-yellow-400"></div><span class="font-bold">造材 (3)</span>
             </button>
-            <button onclick="MAP.setBrush(4, '運材', '#a855f7')" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
+            <button onclick="MAP.setBrush(4, '運材', '#a855f7', event)" class="paint-btn bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex flex-col items-center gap-2 active:bg-slate-700">
                 <div class="w-8 h-8 rounded-full bg-purple-500/80 border border-purple-400"></div><span class="font-bold">運材 (4)</span>
             </button>
-            <button onclick="MAP.setBrush(0, '消しゴム', '#94a3b8')" class="paint-btn col-span-2 bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex justify-center items-center gap-2 active:bg-slate-700">
+            <button onclick="MAP.setBrush(0, '消しゴム', '#94a3b8', event)" class="paint-btn col-span-2 bg-slate-800 p-4 rounded-xl border-2 border-slate-700 flex justify-center items-center gap-2 active:bg-slate-700">
                 <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                 <span class="font-bold">消しゴム</span>
             </button>
@@ -643,6 +643,10 @@
                 }
             },
             openBottomSheet: () => {
+                if (!STATE.currentSite) {
+                    alert("現場（地物）が未選択です。先にQRから現場を登録・選択してください。");
+                    return;
+                }
                 STATE.mode = 'paint';
                 document.getElementById('bottom-sheet').classList.remove('translate-y-full', 'sheet-collapsed');
                 document.getElementById('btn-open-record').classList.add('translate-y-24');
@@ -672,7 +676,7 @@
                 document.getElementById('tab-counter').classList.toggle('hidden', tab !== 'counter');
                 document.getElementById('tab-btn-paint').className = tab === 'paint' ? 'flex-1 py-3 text-center font-bold border-b-2 border-blue-500 text-blue-400' : 'flex-1 py-3 text-center font-bold border-b-2 border-transparent text-slate-500';
                 document.getElementById('tab-btn-counter').className = tab === 'counter' ? 'flex-1 py-3 text-center font-bold border-b-2 border-blue-500 text-blue-400' : 'flex-1 py-3 text-center font-bold border-b-2 border-transparent text-slate-500';
-                
+                STATE.mode = tab === 'paint' ? 'paint' : 'view';
                 if(tab === 'counter') document.getElementById('bottom-sheet').classList.remove('sheet-collapsed');
             },
             updateToolLabel: () => {
@@ -869,13 +873,17 @@
                 MAP.canvas.width = window.innerWidth;
                 MAP.canvas.height = window.innerHeight;
             },
-            setBrush: (val, name, color) => {
+            setBrush: (val, name, color, ev) => {
+                if (!STATE.currentSite) {
+                    alert("現場（地物）が未選択です。先にQRから現場を登録・選択してください。");
+                    return;
+                }
                 STATE.brush = { val, name, color };
                 UI.updateToolLabel();
                 UI.collapseToToolbar(); 
                 
                 document.querySelectorAll('.paint-btn').forEach(b => b.classList.remove('border-blue-500', 'bg-blue-900/30'));
-                event.currentTarget.classList.add('border-blue-500', 'bg-blue-900/30');
+                if (ev && ev.currentTarget) ev.currentTarget.classList.add('border-blue-500', 'bg-blue-900/30');
             },
             
             getViewBbox: () => {
@@ -1435,6 +1443,10 @@
                     p: RLE.encode(STATE.currentSite.paintData)
                 };
                 const jsonStr = JSON.stringify(payload);
+                const compressed = (typeof LZString !== 'undefined' && LZString.compressToEncodedURIComponent)
+                    ? LZString.compressToEncodedURIComponent(jsonStr)
+                    : null;
+                const qrText = compressed ? `m|${compressed}` : jsonStr;
                 document.getElementById('qr-modal-title').innerText = "作業実績QR";
                 document.getElementById('qr-modal').classList.remove('hidden');
                 document.getElementById('qr-display').classList.remove('hidden');
@@ -1443,14 +1455,14 @@
                 const qrContainer = document.getElementById('qr-canvas-container');
                 qrContainer.innerHTML = '';
                 new QRCode(qrContainer, {
-                    text: jsonStr,
-                    width: 240,
-                    height: 240,
+                    text: qrText,
+                    width: 280,
+                    height: 280,
                     colorDark : "#000000",
                     colorLight : "#ffffff",
-                    correctLevel : QRCode.CorrectLevel.L
+                    correctLevel : QRCode.CorrectLevel.M
                 });
-                document.getElementById('qr-export-text').innerText = jsonStr; 
+                document.getElementById('qr-export-text').innerText = qrText; 
             },
             copyExportQR: () => {
                 const text = document.getElementById('qr-export-text').innerText;
@@ -1571,7 +1583,11 @@
                     return;
                 }
                 navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { ideal: 'environment' } }
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
                 }).then(stream => {
                     QR.stream = stream;
                     video.srcObject = stream;
@@ -1597,7 +1613,7 @@
                         canvas.height = height;
                         ctx.drawImage(video, 0, 0, width, height);
                         const imageData = ctx.getImageData(0, 0, width, height);
-                        const code = jsQR(imageData.data, width, height, { inversionAttempts: "dontInvert" });
+                        const code = jsQR(imageData.data, width, height, { inversionAttempts: "attemptBoth" });
                         if (code && code.data) {
                             if (QR.mergeMode) {
                                 const now = Date.now();
@@ -1629,7 +1645,7 @@
                         canvas.height = img.height;
                         ctx.drawImage(img, 0, 0);
                         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQR(imageData.data, canvas.width, canvas.height, { inversionAttempts: "dontInvert" });
+                        const code = jsQR(imageData.data, canvas.width, canvas.height, { inversionAttempts: "attemptBoth" });
                         if (code && code.data) {
                             QR.handleResult(code.data);
                         } else {
@@ -1642,6 +1658,17 @@
                 event.target.value = "";
             },
             handleResult: (decodedText) => {
+                if (typeof decodedText === 'string' && decodedText.startsWith('m|')) {
+                    try {
+                        const comp = decodedText.slice(2);
+                        const raw = (typeof LZString !== 'undefined' && LZString.decompressFromEncodedURIComponent)
+                            ? LZString.decompressFromEncodedURIComponent(comp)
+                            : null;
+                        if (raw) decodedText = raw;
+                    } catch (e) {
+                        console.warn("merge QR decompress failed:", e);
+                    }
+                }
                 if (/^\d+\/\d+\|/.test(decodedText)) {
                     handleDirectQRChunk(decodedText);
                     return;
