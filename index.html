@@ -225,6 +225,12 @@
             <div id="qr-display" class="hidden bg-white p-6 rounded-xl w-full max-w-sm flex flex-col items-center justify-center">
                 <div id="qr-canvas-container" class="flex justify-center items-center bg-white p-2 rounded-lg"></div>
                 <p class="mt-4 text-sm text-slate-600 font-bold">PC・仲間のモバイルで読み取ってください</p>
+                <p id="qr-export-chunk-info" class="hidden mt-2 text-xs font-bold text-blue-700"></p>
+                <div id="qr-export-chunk-controls" class="hidden mt-2 w-full grid grid-cols-3 gap-2">
+                    <button onclick="SYNC.prevExportChunk()" class="bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-bold">前へ</button>
+                    <button id="qr-export-auto-btn" onclick="SYNC.toggleExportAuto()" class="bg-blue-100 text-blue-700 py-2 rounded-lg text-xs font-bold">自動送り: ON</button>
+                    <button onclick="SYNC.nextExportChunk()" class="bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-bold">次へ</button>
+                </div>
                 <div class="mt-2 w-full h-16 overflow-y-auto bg-slate-100 p-2 rounded cursor-text" style="user-select: text; -webkit-user-select: text;">
                     <p class="font-mono text-[10px] break-all text-slate-800" id="qr-export-text"></p>
                 </div>
@@ -1398,6 +1404,65 @@
         };
 
         const SYNC = {
+            exportChunks: [],
+            exportChunkIndex: 0,
+            exportAutoTimer: null,
+            exportAutoEnabled: true,
+            isBboxCompatible: (a, b, eps = 1e-6) => {
+                if (!Array.isArray(a) || !Array.isArray(b) || a.length < 4 || b.length < 4) return false;
+                for (let i = 0; i < 4; i++) {
+                    const av = parseFloat(a[i]), bv = parseFloat(b[i]);
+                    if (isNaN(av) || isNaN(bv) || Math.abs(av - bv) > eps) return false;
+                }
+                return true;
+            },
+            stopExportAuto: () => {
+                if (SYNC.exportAutoTimer) {
+                    clearInterval(SYNC.exportAutoTimer);
+                    SYNC.exportAutoTimer = null;
+                }
+            },
+            renderExportChunk: () => {
+                const qrContainer = document.getElementById('qr-canvas-container');
+                const info = document.getElementById('qr-export-chunk-info');
+                const controls = document.getElementById('qr-export-chunk-controls');
+                const autoBtn = document.getElementById('qr-export-auto-btn');
+                if (!qrContainer || !info || !controls) return;
+                const total = SYNC.exportChunks.length;
+                const hasChunks = total > 1;
+                controls.classList.toggle('hidden', !hasChunks);
+                info.classList.toggle('hidden', !hasChunks);
+                if (hasChunks) info.innerText = `分割QR ${SYNC.exportChunkIndex + 1}/${total}`;
+                const text = total > 0 ? SYNC.exportChunks[SYNC.exportChunkIndex] : '';
+                qrContainer.innerHTML = '';
+                new QRCode(qrContainer, {
+                    text,
+                    width: 280,
+                    height: 280,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M
+                });
+                if (autoBtn) autoBtn.innerText = `自動送り: ${SYNC.exportAutoEnabled ? 'ON' : 'OFF'}`;
+            },
+            nextExportChunk: () => {
+                if (!SYNC.exportChunks.length) return;
+                SYNC.exportChunkIndex = (SYNC.exportChunkIndex + 1) % SYNC.exportChunks.length;
+                SYNC.renderExportChunk();
+            },
+            prevExportChunk: () => {
+                if (!SYNC.exportChunks.length) return;
+                SYNC.exportChunkIndex = (SYNC.exportChunkIndex - 1 + SYNC.exportChunks.length) % SYNC.exportChunks.length;
+                SYNC.renderExportChunk();
+            },
+            toggleExportAuto: () => {
+                SYNC.exportAutoEnabled = !SYNC.exportAutoEnabled;
+                SYNC.stopExportAuto();
+                if (SYNC.exportAutoEnabled && SYNC.exportChunks.length > 1) {
+                    SYNC.exportAutoTimer = setInterval(SYNC.nextExportChunk, 1200);
+                }
+                SYNC.renderExportChunk();
+            },
             openMergeScanner: () => {
                 if(!STATE.currentSite) return alert("現場を選択してください");
                 QR.startScan((data) => {
@@ -1409,6 +1474,14 @@
                         if (isMergePayload) {
                             if(payload.id !== STATE.activeSiteId) {
                                 alert("別の現場のデータです。マージできません。");
+                                return;
+                            }
+                            if (!Array.isArray(payload.b) || payload.b.length < 4) {
+                                alert("受信データに位置基準(bbox)がありません。ずれ防止のためマージできません。");
+                                return;
+                            }
+                            if (!SYNC.isBboxCompatible(STATE.currentSite.bbox, payload.b)) {
+                                alert("位置基準（bbox）が一致しないためマージできません。現場データを再同期してください。");
                                 return;
                             }
                             for(let i=0; i<4; i++) {
@@ -1433,34 +1506,40 @@
                         alert("QRの解析に失敗しました。");
                         console.error(e);
                     }
-                });
+                }, { mergeMode: true });
             },
             showExportQR: () => {
                 if(!STATE.currentSite) return alert("現場を選択してください");
                 const payload = {
                     id: STATE.activeSiteId,
                     c: STATE.currentSite.counters,
-                    p: RLE.encode(STATE.currentSite.paintData)
+                    p: RLE.encode(STATE.currentSite.paintData),
+                    b: (STATE.currentSite.bbox || []).map(v => Number(parseFloat(v).toFixed(6)))
                 };
                 const jsonStr = JSON.stringify(payload);
-                // PC側の既存取込との互換性を優先し、作業実績QRは常にJSON文字列で出力する
-                const qrText = jsonStr;
+                const compressed = (typeof LZString !== 'undefined' && LZString.compressToEncodedURIComponent)
+                    ? LZString.compressToEncodedURIComponent(jsonStr)
+                    : null;
+                const qrText = compressed ? `m|${compressed}` : jsonStr;
+                const chunkSize = 700;
+                if (qrText.length > chunkSize) {
+                    const total = Math.ceil(qrText.length / chunkSize);
+                    SYNC.exportChunks = Array.from({ length: total }, (_, i) => `${i + 1}/${total}|${qrText.slice(i * chunkSize, (i + 1) * chunkSize)}`);
+                } else {
+                    SYNC.exportChunks = [qrText];
+                }
+                SYNC.exportChunkIndex = 0;
                 document.getElementById('qr-modal-title').innerText = "作業実績QR";
                 document.getElementById('qr-modal').classList.remove('hidden');
                 document.getElementById('qr-display').classList.remove('hidden');
                 document.getElementById('qr-reader').classList.add('hidden');
-                
-                const qrContainer = document.getElementById('qr-canvas-container');
-                qrContainer.innerHTML = '';
-                new QRCode(qrContainer, {
-                    text: qrText,
-                    width: 280,
-                    height: 280,
-                    colorDark : "#000000",
-                    colorLight : "#ffffff",
-                    correctLevel : QRCode.CorrectLevel.M
-                });
-                document.getElementById('qr-export-text').innerText = qrText; 
+                SYNC.stopExportAuto();
+                if (SYNC.exportAutoEnabled && SYNC.exportChunks.length > 1) {
+                    SYNC.exportAutoTimer = setInterval(SYNC.nextExportChunk, 1200);
+                }
+                SYNC.renderExportChunk();
+                // PC取り込み互換のため、コピー用テキストは常に素のJSONを表示
+                document.getElementById('qr-export-text').innerText = jsonStr; 
             },
             copyExportQR: () => {
                 const text = document.getElementById('qr-export-text').innerText;
@@ -1478,7 +1557,7 @@
             }
         };
 
-        // 選択地物を直接QR化（1/3|...）のチャンクを集めてLZ復号し現場登録
+        // QR分割（1/3|...）のチャンクを集約し、復号後に通常ハンドラへ渡す
         let directChunkState = { total: 0, chunks: {} };
         let lastChunkKey = '';
         let lastChunkTime = 0;
@@ -1528,20 +1607,25 @@
             lastChunkKey = '';
             lastChunkTime = 0;
             try {
-                let raw = (typeof LZString !== 'undefined' && LZString.decompressFromEncodedURIComponent)
-                    ? LZString.decompressFromEncodedURIComponent(full)
-                    : null;
-                if (!raw) {
-                    alert("データの復号に失敗しました。QRコードを最初から順に読み直してください。");
-                    return true;
+                let raw = full;
+                if (raw.startsWith('m|')) {
+                    const comp = raw.slice(2);
+                    const decomp = (typeof LZString !== 'undefined' && LZString.decompressFromEncodedURIComponent)
+                        ? LZString.decompressFromEncodedURIComponent(comp)
+                        : null;
+                    if (!decomp) {
+                        alert("データの復号に失敗しました。QRコードを最初から順に読み直してください。");
+                        return true;
+                    }
+                    raw = decomp;
+                } else {
+                    // 旧仕様（LZ圧縮のみ）の互換
+                    const decomp = (typeof LZString !== 'undefined' && LZString.decompressFromEncodedURIComponent)
+                        ? LZString.decompressFromEncodedURIComponent(raw)
+                        : null;
+                    if (decomp) raw = decomp;
                 }
-                const parsed = JSON.parse(raw);
-                QR.close();
-                if (parsed.type === 'featureCollection' && parsed.geom) {
-                    parsed.id = parsed.id || 'import-' + Date.now();
-                    if (!parsed.name) parsed.name = parsed.id;
-                }
-                await App.handleNewSiteQR(JSON.stringify(parsed));
+                QR.handleResult(raw);
             } catch (e) {
                 console.error(e);
                 alert("地物データの復号に失敗しました。");
@@ -1697,6 +1781,7 @@
             },
             close: () => {
                 QR.stopCamera();
+                if (typeof SYNC !== 'undefined' && SYNC.stopExportAuto) SYNC.stopExportAuto();
                 document.getElementById('qr-modal').classList.add('hidden');
             }
         };
